@@ -186,6 +186,24 @@ function demoDevices(): Array<
   ];
 }
 
+/**
+ * A walking path that enters at the south door, crosses the open office,
+ * cuts up through the conference area, and ends in the server room.
+ * Floor-plan pixel coords.
+ */
+function demoSimPath() {
+  return [
+    { x: 220, y: 730 }, // outside the south door
+    { x: 220, y: 600 }, // inside the office, just past the door
+    { x: 400, y: 540 }, // crossing the open office
+    { x: 600, y: 540 }, // workspace
+    { x: 600, y: 410 }, // approaching the conference door
+    { x: 740, y: 410 }, // through the door
+    { x: 740, y: 250 }, // up the corridor
+    { x: 940, y: 250 }, // into the server room
+  ];
+}
+
 export function buildDemoFloor(): Omit<Floor, "id" | "index"> {
   return {
     name: "Ground floor — demo office",
@@ -194,5 +212,6 @@ export function buildDemoFloor(): Omit<Floor, "id" | "index"> {
     ceilingHeight: 3.0,
     walls: demoWalls(),
     devices: demoDevices(),
+    simPath: demoSimPath(),
   };
 }

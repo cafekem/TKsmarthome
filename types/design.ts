@@ -70,6 +70,8 @@ export interface Floor {
   ceilingHeight: number;
   walls: Wall[];
   devices: Device[];
+  /** Optional preset path used by simulation mode. Floor-plan pixel coords. */
+  simPath?: Vec2[];
 }
 
 export interface DesignDocument {

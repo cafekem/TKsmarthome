@@ -5,7 +5,12 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { Grid, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
+import { useSimStore } from "@/lib/sim-store";
 import type { Device, Floor, Wall } from "@/types/design";
+import { WalkController } from "./WalkController";
+import { SimController } from "@/components/simulation/SimController";
+import { Actor3D } from "@/components/simulation/Actor3D";
+import { SimPath3D } from "@/components/simulation/SimPath3D";
 
 interface Scene3DCanvasProps {
   width: number;
@@ -19,9 +24,15 @@ const DEVICE_COLORS = {
   network: "#a78bfa",
 } as const;
 
-export function Scene3DCanvas({ width, height }: Scene3DCanvasProps) {
+export function Scene3DCanvas({
+  width,
+  height,
+  showSim = false,
+}: Scene3DCanvasProps & { showSim?: boolean }) {
   const floor = useActiveFloor();
   const showCoverage = useDesignStore((s) => s.showCoverage);
+  const threeDMode = useDesignStore((s) => s.threeDMode);
+  const setThreeDMode = useDesignStore((s) => s.setThreeDMode);
 
   const frame = useMemo(() => floor && computeFrame(floor), [floor]);
 
@@ -31,6 +42,16 @@ export function Scene3DCanvas({ width, height }: Scene3DCanvasProps) {
 
   const { center, span, cameraPos } = frame;
   const maxDim = Math.max(span.x, span.z, 6);
+
+  // Find a good walk spawn point: floor center at human eye height, with the
+  // camera initially facing toward the building center (so the user is at the
+  // edge looking in).
+  const walkSpawn: [number, number, number] = [
+    center.x - span.x * 0.3,
+    1.65,
+    center.z + span.z * 0.3,
+  ];
+  const walkLookAt: [number, number, number] = [center.x, 1.5, center.z];
 
   return (
     <div className="absolute inset-0" style={{ width, height }}>
@@ -43,7 +64,17 @@ export function Scene3DCanvas({ width, height }: Scene3DCanvasProps) {
           far: maxDim * 12,
         }}
         onCreated={({ camera }) => {
-          camera.lookAt(center.x, 1, center.z);
+          const eye = new THREE.Vector3(
+            cameraPos[0],
+            cameraPos[1],
+            cameraPos[2]
+          );
+          const lookAt = new THREE.Vector3(center.x, 1, center.z);
+          const up = new THREE.Vector3(0, 1, 0);
+          const m = new THREE.Matrix4().lookAt(eye, lookAt, up);
+          camera.position.copy(eye);
+          camera.quaternion.setFromRotationMatrix(m);
+          camera.updateMatrixWorld(true);
         }}
         gl={{ antialias: true }}
       >
@@ -117,18 +148,39 @@ export function Scene3DCanvas({ width, height }: Scene3DCanvasProps) {
           />
         ))}
 
-        <OrbitControls
-          makeDefault
-          enableDamping={false}
-          minDistance={1}
-          maxDistance={maxDim * 4}
-          maxPolarAngle={Math.PI / 2.05}
-          target={[center.x, 1, center.z]}
-        />
-        <FramingInit
-          cameraPos={cameraPos}
-          target={[center.x, 1, center.z]}
-        />
+        {/* Simulation overlay: actor + path */}
+        {showSim && floor.simPath && floor.simPath.length >= 2 && (
+          <>
+            <SimPath3D path={floor.simPath} scale={floor.scale} />
+            <Actor3D />
+            <SimController />
+          </>
+        )}
+
+        {threeDMode === "orbit" ? (
+          <>
+            <OrbitControls
+              makeDefault
+              enableDamping={false}
+              minDistance={1}
+              maxDistance={maxDim * 4}
+              maxPolarAngle={Math.PI / 2.05}
+              target={[center.x, 1, center.z]}
+            />
+            <FramingInit
+              cameraPos={cameraPos}
+              target={[center.x, 1, center.z]}
+            />
+          </>
+        ) : (
+          <WalkController
+            walls={floor.walls}
+            scale={floor.scale}
+            spawn={walkSpawn}
+            spawnLookAt={walkLookAt}
+            onExit={() => setThreeDMode("orbit")}
+          />
+        )}
       </Canvas>
     </div>
   );
@@ -261,8 +313,18 @@ function Device3D({
   const px = device.position.x / scale;
   const pz = device.position.y / scale;
   const py = device.mountHeight;
-  const color = DEVICE_COLORS[device.type];
+  const baseColor = DEVICE_COLORS[device.type];
   const rotation = device.rotation;
+  const detecting = useSimStore((s) =>
+    device.type === "camera"
+      ? s.detectingCameras.has(device.id)
+      : device.type === "sensor"
+        ? s.triggeredSensors.has(device.id)
+        : false
+  );
+  // Cameras/sensors glow brighter when detecting; others use their normal color
+  const color = detecting ? "#34d399" : baseColor;
+  const emissiveIntensity = detecting ? 1.1 : 0.35;
 
   return (
     <group position={[px, py, pz]}>
@@ -274,15 +336,23 @@ function Device3D({
 
       {/* Body */}
       <mesh castShadow>
-        <sphereGeometry args={[0.12, 16, 16]} />
+        <sphereGeometry args={[detecting ? 0.16 : 0.12, 16, 16]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={0.35}
+          emissiveIntensity={emissiveIntensity}
           metalness={0.2}
           roughness={0.5}
         />
       </mesh>
+      {detecting && (
+        <pointLight
+          position={[0, 0, 0]}
+          color={color}
+          intensity={1.2}
+          distance={3.5}
+        />
+      )}
 
       {/* Direction marker */}
       {(device.type === "camera" || device.type === "reader") && (

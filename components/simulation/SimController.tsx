@@ -1,0 +1,110 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useActiveFloor } from "@/lib/store";
+import { useSimStore } from "@/lib/sim-store";
+import { computeDetection, positionOnPath } from "@/lib/detection";
+import type { CameraDevice, SensorDevice, Vec2 } from "@/types/design";
+
+interface SimControllerProps {
+  onActorMove?: (positionPx: Vec2) => void;
+}
+
+export function SimController({ onActorMove }: SimControllerProps) {
+  const floor = useActiveFloor();
+  const running = useSimStore((s) => s.running);
+  const speed = useSimStore((s) => s.speed);
+  const t = useSimStore((s) => s.t);
+  const tick = useSimStore((s) => s.tick);
+  const setDetection = useSimStore((s) => s.setDetection);
+  const pushEvent = useSimStore((s) => s.pushEvent);
+  const reset = useSimStore((s) => s.reset);
+
+  const lastDetected = useRef<Set<string>>(new Set());
+  const lastTriggered = useRef<Set<string>>(new Set());
+
+  // Reset whenever the floor changes
+  useEffect(() => {
+    reset();
+    lastDetected.current = new Set();
+    lastTriggered.current = new Set();
+  }, [floor?.id, reset]);
+
+  useFrame((_, delta) => {
+    if (!floor) return;
+    if (running) {
+      tick(Math.min(delta, 0.1));
+    }
+
+    const path = floor.simPath ?? [];
+    if (path.length < 2) return;
+
+    const { position: actorPos, doneAt } = positionOnPath(
+      path,
+      t,
+      1.4,
+      floor.scale
+    );
+
+    if (running && t > doneAt) {
+      useSimStore.setState({ running: false });
+    }
+
+    onActorMove?.(actorPos);
+
+    const cameras = floor.devices.filter(
+      (d): d is CameraDevice => d.type === "camera"
+    );
+    const sensors = floor.devices.filter(
+      (d): d is SensorDevice => d.type === "sensor"
+    );
+
+    const result = computeDetection({
+      cameras,
+      sensors,
+      walls: floor.walls,
+      actorPosition: actorPos,
+      scalePxPerMeter: floor.scale,
+    });
+
+    // Emit events on edges (newly detected/lost/triggered)
+    for (const id of result.detectingCameras) {
+      if (!lastDetected.current.has(id)) {
+        pushEvent({
+          timestamp: t,
+          type: "detected",
+          deviceId: id,
+          actorPosition: actorPos,
+        });
+      }
+    }
+    for (const id of lastDetected.current) {
+      if (!result.detectingCameras.has(id)) {
+        pushEvent({
+          timestamp: t,
+          type: "lost",
+          deviceId: id,
+          actorPosition: actorPos,
+        });
+      }
+    }
+    for (const id of result.triggeredSensors) {
+      if (!lastTriggered.current.has(id)) {
+        pushEvent({
+          timestamp: t,
+          type: "triggered",
+          deviceId: id,
+          actorPosition: actorPos,
+        });
+      }
+    }
+
+    lastDetected.current = result.detectingCameras;
+    lastTriggered.current = result.triggeredSensors;
+
+    setDetection(result.detectingCameras, result.triggeredSensors);
+  });
+
+  return null;
+}

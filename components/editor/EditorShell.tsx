@@ -9,7 +9,7 @@ import { PropertiesPanel } from "./PropertiesPanel";
 import { StatusBar } from "./StatusBar";
 import { Canvas2D } from "@/components/canvas2d/Canvas2D";
 import { Scene3D } from "@/components/scene3d/Scene3D";
-import { SimulationPlaceholder } from "@/components/simulation/SimulationPlaceholder";
+import { SimView } from "@/components/simulation/SimView";
 
 function useHasHydrated() {
   const [hydrated, setHydrated] = useState(false);
@@ -54,7 +54,7 @@ export function EditorShell({ designId }: { designId: string }) {
             >
               {mode === "2d" && <Canvas2D />}
               {mode === "3d" && <Scene3D />}
-              {mode === "sim" && <SimulationPlaceholder />}
+              {mode === "sim" && <SimView />}
             </motion.div>
           </AnimatePresence>
         </div>
