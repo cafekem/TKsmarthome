@@ -119,8 +119,7 @@ export function Scene3DCanvas({ width, height }: Scene3DCanvasProps) {
 
         <OrbitControls
           makeDefault
-          enableDamping
-          dampingFactor={0.08}
+          enableDamping={false}
           minDistance={1}
           maxDistance={maxDim * 4}
           maxPolarAngle={Math.PI / 2.05}
