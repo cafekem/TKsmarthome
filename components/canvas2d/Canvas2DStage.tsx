@@ -419,9 +419,8 @@ function FloorPlanEmptyState({
             , or upload your own.
           </div>
           <div className="text-sm text-muted-foreground leading-relaxed max-w-sm">
-            The demo ships with a floor plan, traced walls, and ten devices —
-            cameras, readers, sensors, network. Flip to 3D to see the rooms
-            extrude.
+            Take the sample office for a spin, or drop in your own plan to
+            start from scratch.
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
