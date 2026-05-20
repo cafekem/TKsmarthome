@@ -167,11 +167,13 @@ function computeFrame(floor: Floor) {
     z: Math.max((maxY - minY) / floor.scale, 6),
   };
   const maxDim = Math.max(span.x, span.z);
-  // Stand back along the SE diagonal at ~30° elevation
+  // Stand high and offset along the SE diagonal so the whole building reads
+  // top-down-ish from outside; the user can orbit from there. Walls are
+  // 2.7m tall, so we lift the camera well above that.
   const cameraPos: [number, number, number] = [
-    center.x + maxDim * 0.85,
-    Math.max(maxDim * 0.65, 4),
-    center.z + maxDim * 0.85,
+    center.x + maxDim * 0.6,
+    Math.max(maxDim * 1.1, 12),
+    center.z + maxDim * 1.05,
   ];
   return { center, span, cameraPos };
 }
