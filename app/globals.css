@@ -244,6 +244,30 @@
   animation: pulse-ring 2.4s infinite;
 }
 
+/* Print stylesheet — keeps only the quote drawer visible on print */
+@media print {
+  html,
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  aside,
+  aside * {
+    visibility: visible;
+  }
+  aside {
+    position: absolute !important;
+    inset: 0 !important;
+  }
+  @page {
+    size: letter;
+    margin: 0.5in;
+  }
+}
+
 @keyframes fade-up {
   from {
     opacity: 0;

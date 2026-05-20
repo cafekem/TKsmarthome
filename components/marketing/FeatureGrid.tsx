@@ -3,11 +3,11 @@
 import { motion } from "framer-motion";
 import {
   Boxes,
-  Eye,
   Footprints,
   Layers,
+  MousePointer2,
   Play,
-  Wifi,
+  Receipt,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -27,38 +27,38 @@ const features: Feature[] = [
     accent: "from-emerald-400/20 via-emerald-400/5 to-transparent",
   },
   {
+    icon: MousePointer2,
+    title: "Edit anywhere",
+    description:
+      "Drag devices from the library onto either the 2D canvas or the 3D scene. Click to select, drag to move, edit properties in the side panel. Walls block placement.",
+    accent: "from-sky-400/20 via-sky-400/5 to-transparent",
+  },
+  {
     icon: Footprints,
     title: "First-person walkthrough",
     description:
-      "WASD through the building you just designed. See exactly what each camera sees, find dead zones with your own eyes.",
-    accent: "from-sky-400/20 via-sky-400/5 to-transparent",
+      "WASD through the building you just designed. See exactly what each camera sees, find dead zones with your own eyes. Real wall collision.",
+    accent: "from-violet-400/20 via-violet-400/5 to-transparent",
   },
   {
     icon: Play,
     title: "Threat simulation",
     description:
-      "Drop a threat actor, draw their path, hit play. Cameras light up green when they see, red when they don't. After-action report at the end.",
+      "Drop a subject, play the timeline, watch your cameras pick them up in real time. Per-camera coverage % and an after-action report at the end.",
     accent: "from-rose-400/20 via-rose-400/5 to-transparent",
   },
   {
-    icon: Eye,
-    title: "Live camera POV",
+    icon: Receipt,
+    title: "Instant quotes & BoM",
     description:
-      "Hover any camera in 3D to see its actual point of view. Picture-in-picture monitoring wall, in your browser.",
+      "Generate a customer-ready quote from any design. Bill of materials, labor hours, cabling, commissioning, and tax — all editable to your distributor pricing.",
     accent: "from-amber-400/20 via-amber-400/5 to-transparent",
   },
   {
-    icon: Wifi,
-    title: "Coverage heatmaps",
-    description:
-      "Color the floor by camera redundancy and WiFi signal strength. Spot blind spots and weak coverage instantly.",
-    accent: "from-violet-400/20 via-violet-400/5 to-transparent",
-  },
-  {
     icon: Boxes,
-    title: "BoM & PDF export",
+    title: "Saves & exports",
     description:
-      "One click for a branded survey report with the device list, floor plans, and a simulation summary. Built for your customer, not for you.",
+      "Designs persist to local storage automatically. Export the full design as JSON to back up or share, and print quotes to PDF straight from the browser.",
     accent: "from-teal-400/20 via-teal-400/5 to-transparent",
   },
 ];

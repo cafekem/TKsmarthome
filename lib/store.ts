@@ -20,6 +20,7 @@ import {
   SENSOR_DEFAULTS,
 } from "@/types/design";
 import { buildDemoFloor } from "./demo-design";
+import { DEFAULT_QUOTE_SETTINGS, type QuoteSettings } from "./pricing";
 
 function uid(prefix = "id"): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -70,10 +71,13 @@ interface DesignState {
   tool: Tool;
   showCoverage: boolean;
   viewTransform: ViewTransform;
+  quoteSettings: QuoteSettings;
 
   ensureDesign(id: string): DesignDocument;
   setCurrentDesign(id: string): void;
   updateDesignName(id: string, name: string): void;
+  updateQuoteSettings(partial: Partial<QuoteSettings>): void;
+  importDesign(design: DesignDocument): void;
 
   setViewMode(mode: ViewMode): void;
   setThreeDMode(mode: ThreeDMode): void;
@@ -121,6 +125,7 @@ export const useDesignStore = create<DesignState>()(
         tool: "select",
         showCoverage: true,
         viewTransform: { scale: 1, offset: { x: 0, y: 0 } },
+        quoteSettings: DEFAULT_QUOTE_SETTINGS,
 
         ensureDesign(id) {
           const existing = get().designs[id];
@@ -148,6 +153,19 @@ export const useDesignStore = create<DesignState>()(
               },
             };
           });
+        },
+
+        updateQuoteSettings(partial) {
+          set((state) => ({
+            quoteSettings: { ...state.quoteSettings, ...partial },
+          }));
+        },
+
+        importDesign(design) {
+          set((state) => ({
+            designs: { ...state.designs, [design.id]: design },
+            currentDesignId: design.id,
+          }));
         },
 
         setViewMode(mode) {
@@ -409,13 +427,14 @@ export const useDesignStore = create<DesignState>()(
     ),
     {
       name: "deeper-vision-store",
-      version: 2,
+      version: 3,
       partialize: (state) => ({
         designs: state.designs,
         currentDesignId: state.currentDesignId,
         viewMode: state.viewMode,
         threeDMode: state.threeDMode,
         showCoverage: state.showCoverage,
+        quoteSettings: state.quoteSettings,
       }),
     }
   )
