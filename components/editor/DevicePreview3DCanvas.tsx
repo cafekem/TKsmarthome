@@ -2,8 +2,48 @@
 
 import { useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Bounds } from "@react-three/drei";
 import * as THREE from "three";
+
+/**
+ * Material-lightening pass: traverse the device mesh once on first frame,
+ * find any non-emissive MeshStandardMaterials with a near-black housing
+ * color, and lift them into a mid-grey. This is preview-only — each R3F
+ * canvas has its own material instances so the main 3D scene keeps its
+ * darker, more realistic housings while the 56px library cards get
+ * legible silhouettes.
+ */
+function LightenHousings({ children }: { children: React.ReactNode }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const doneRef = useRef(false);
+  useFrame(() => {
+    if (doneRef.current || !groupRef.current) return;
+    const seen = new Set<THREE.Material>();
+    groupRef.current.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      const mat = obj.material;
+      if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+      if (seen.has(mat)) return;
+      seen.add(mat);
+      const e = mat.emissive;
+      const isEmissive = e.r > 0.05 || e.g > 0.05 || e.b > 0.05;
+      if (isEmissive) return; // keep lens iris and LEDs as-is
+      const hsl = { h: 0, s: 0, l: 0 };
+      mat.color.getHSL(hsl);
+      if (hsl.l < 0.4) {
+        // Lift dark housings into the 0.65-0.78 lightness range so they
+        // read against any preview background, but desaturate slightly so
+        // they don't compete with the accent color.
+        mat.color.setHSL(
+          hsl.h,
+          hsl.s * 0.55,
+          Math.min(0.78, hsl.l + 0.55)
+        );
+      }
+    });
+    doneRef.current = true;
+  });
+  return <group ref={groupRef}>{children}</group>;
+}
 import { DeviceMesh } from "@/components/scene3d/DeviceMesh";
 import type {
   CameraDevice,
@@ -18,11 +58,10 @@ import type {
  * sidebar. Uses the exact same DeviceMesh that gets placed in the building
  * so the library preview never lies about what you're dropping.
  *
- * Each device subtype gets its own:
- *   - tinted background (so each card has a clear color identity)
- *   - camera angle (so the most-recognizable face of the device — dome
- *     bottom, bullet lens, reader pad, NVR front — faces the viewer)
- *   - rim light tinted to the device's accent
+ * Framing is hand-picked per subtype rather than using drei's <Bounds>:
+ * each device kind has its own "hero angle" + camera distance + initial
+ * yaw so the most-recognizable face — dome bottom, bullet lens, reader
+ * pad, NVR front — faces the viewer when the rotation starts.
  */
 
 export type PreviewKind =
@@ -35,44 +74,135 @@ export type PreviewKind =
   | { type: "network"; subtype: "switch" | "access-point" | "nvr" };
 
 const ACCENT_COLORS = {
-  camera: "#10b981", // emerald 500
-  reader: "#0ea5e9", // sky 500
-  sensor: "#f59e0b", // amber 500
-  network: "#8b5cf6", // violet 500
+  camera: "#10b981",
+  reader: "#0ea5e9",
+  sensor: "#f59e0b",
+  network: "#8b5cf6",
 } as const;
 
-// Soft pastel tints used as the canvas background per device type — works
-// well in both light and dark UI themes because the device meshes are dark.
 const BACKGROUND_TINTS = {
-  camera: "#dcf3e7",
-  reader: "#d8eefd",
-  sensor: "#fdeec7",
-  network: "#e7dffb",
+  camera: "#c5ecd4", // emerald 200-ish
+  reader: "#bee0fa", // sky 200
+  sensor: "#fde2a0", // amber 200
+  network: "#d3c4f7", // violet 200
 } as const;
 
-// Per-type fallback camera position
-const CAMERA_POS_BY_TYPE: Record<PreviewKind["type"], [number, number, number]> = {
-  camera: [0.5, 0.25, 0.65],
-  reader: [0.6, 0.05, 0.55],
-  sensor: [0.45, 0.2, 0.55],
-  network: [0.4, 0.45, 0.55],
-};
+interface PreviewLayout {
+  /** Camera eye position in world space */
+  cameraPos: [number, number, number];
+  /** Where the camera looks */
+  lookAt: [number, number, number];
+  /** Initial yaw of the device so its interesting face starts toward camera */
+  initialYaw: number;
+  /** Uniform scale applied to the device — bigger = fills more of the card */
+  scale: number;
+  /** Field-of-view in degrees */
+  fov: number;
+}
 
-// Per-subtype override for the cases where the type-level position misses
-const CAMERA_POS_BY_SUBTYPE: Record<string, [number, number, number]> = {
-  dome: [0.35, -0.12, 0.55],
-  fisheye: [0.35, -0.12, 0.55],
-  ptz: [0.55, 0.3, 0.7],
-  fixed: [0.55, 0.22, 0.65],
-  card: [0.65, 0.05, 0.4],
-  biometric: [0.6, 0.05, 0.45],
-  keypad: [0.6, 0.05, 0.45],
-  motion: [0.35, 0.25, 0.55],
-  "glass-break": [0.6, 0.05, 0.4],
-  "door-contact": [0.55, 0.1, 0.45],
-  "access-point": [0.35, 0.55, 0.45],
-  switch: [0.4, 0.4, 0.6],
-  nvr: [0.4, 0.4, 0.6],
+const LAYOUTS: Record<string, PreviewLayout> = {
+  // Cameras
+  dome: {
+    cameraPos: [0.55, 0.2, 0.85],
+    lookAt: [0, -0.05, 0],
+    initialYaw: 0,
+    scale: 1.6,
+    fov: 32,
+  },
+  fisheye: {
+    cameraPos: [0.55, 0.2, 0.85],
+    lookAt: [0, -0.05, 0],
+    initialYaw: 0,
+    scale: 1.6,
+    fov: 32,
+  },
+  ptz: {
+    cameraPos: [0.65, 0.15, 0.95],
+    lookAt: [0, -0.05, 0],
+    initialYaw: -0.45,
+    scale: 1.55,
+    fov: 32,
+  },
+  fixed: {
+    cameraPos: [0.7, 0.2, 0.95],
+    lookAt: [0, 0, 0],
+    initialYaw: -0.55,
+    scale: 1.35,
+    fov: 32,
+  },
+  // Readers (wall-mount, deep along -X)
+  card: {
+    cameraPos: [0.85, 0.05, 0.55],
+    lookAt: [0, 0, 0],
+    initialYaw: -0.2,
+    scale: 1.9,
+    fov: 32,
+  },
+  biometric: {
+    cameraPos: [0.85, 0.05, 0.55],
+    lookAt: [0, 0, 0],
+    initialYaw: -0.2,
+    scale: 1.9,
+    fov: 32,
+  },
+  keypad: {
+    cameraPos: [0.85, 0.05, 0.55],
+    lookAt: [0, 0, 0],
+    initialYaw: -0.2,
+    scale: 1.9,
+    fov: 32,
+  },
+  // Sensors
+  motion: {
+    cameraPos: [0.4, 0.35, 0.6],
+    lookAt: [0, 0, 0],
+    initialYaw: 0,
+    scale: 2.0,
+    fov: 32,
+  },
+  "glass-break": {
+    cameraPos: [0.7, 0.05, 0.45],
+    lookAt: [0, 0, 0],
+    initialYaw: -0.25,
+    scale: 2.0,
+    fov: 32,
+  },
+  "door-contact": {
+    cameraPos: [0.7, 0.05, 0.45],
+    lookAt: [0, 0, 0],
+    initialYaw: -0.3,
+    scale: 2.4,
+    fov: 32,
+  },
+  smoke: {
+    cameraPos: [0.4, 0.35, 0.6],
+    lookAt: [0, 0, 0],
+    initialYaw: 0,
+    scale: 2.0,
+    fov: 32,
+  },
+  // Network
+  "access-point": {
+    cameraPos: [0.45, 0.55, 0.55],
+    lookAt: [0, 0, 0],
+    initialYaw: 0,
+    scale: 1.7,
+    fov: 32,
+  },
+  switch: {
+    cameraPos: [0.45, 0.4, 0.7],
+    lookAt: [0, 0, 0],
+    initialYaw: -0.3,
+    scale: 1.2,
+    fov: 32,
+  },
+  nvr: {
+    cameraPos: [0.45, 0.4, 0.7],
+    lookAt: [0, 0, 0],
+    initialYaw: -0.3,
+    scale: 1.2,
+    fov: 32,
+  },
 };
 
 function buildPreviewDevice(kind: PreviewKind): Device {
@@ -118,9 +248,11 @@ function buildPreviewDevice(kind: PreviewKind): Device {
 
 function Rotator({
   children,
-  speed = 0.45,
+  initialYaw,
+  speed = 0.3,
 }: {
   children: React.ReactNode;
+  initialYaw: number;
   speed?: number;
 }) {
   const ref = useRef<THREE.Group>(null);
@@ -129,60 +261,72 @@ function Rotator({
       ref.current.rotation.y += delta * speed;
     }
   });
-  return <group ref={ref}>{children}</group>;
+  return (
+    <group ref={ref} rotation={[0, initialYaw, 0]}>
+      {children}
+    </group>
+  );
 }
 
 export function DevicePreview3DCanvas({ kind }: { kind: PreviewKind }) {
   const device = buildPreviewDevice(kind);
   const accent = ACCENT_COLORS[device.type];
   const bg = BACKGROUND_TINTS[device.type];
-  const cameraPos =
-    CAMERA_POS_BY_SUBTYPE[kind.subtype] ?? CAMERA_POS_BY_TYPE[device.type];
+  const layout = LAYOUTS[kind.subtype];
 
   return (
     <Canvas
-      dpr={[0.9, 1.6]}
-      camera={{ position: cameraPos, fov: 34 }}
+      dpr={[1, 1.8]}
+      camera={{ position: layout.cameraPos, fov: layout.fov, near: 0.1, far: 10 }}
       gl={{ antialias: true }}
-      onCreated={({ gl }) => {
+      onCreated={({ camera, gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
-        gl.toneMappingExposure = 1.15;
+        gl.toneMappingExposure = 1.25;
         gl.outputColorSpace = THREE.SRGBColorSpace;
+        camera.lookAt(
+          layout.lookAt[0],
+          layout.lookAt[1],
+          layout.lookAt[2]
+        );
+        camera.updateMatrixWorld(true);
       }}
       style={{ pointerEvents: "none", width: "100%", height: "100%" }}
     >
       <color attach="background" args={[bg]} />
 
-      {/* Studio lighting: bright ambient + warm key + cool fill + accent rim
-         behind the device so its silhouette reads even at 56px wide. */}
-      <ambientLight intensity={0.95} />
+      {/* Studio-grade lighting: strong ambient + warm key + cool fill +
+         accent rim from behind. Whole thing tuned for small (~56px) previews
+         viewed against light or dark sidebars. */}
+      <ambientLight intensity={1.05} />
       <directionalLight
         position={[2, 3, 2.5]}
-        intensity={1.6}
+        intensity={1.7}
         color="#fff5d8"
       />
       <directionalLight
-        position={[-2, 1.2, -1]}
-        intensity={0.65}
+        position={[-2, 1.5, -1]}
+        intensity={0.55}
         color="#cfe2ff"
       />
       <pointLight
         position={[0, 0.4, -1.2]}
-        intensity={0.55}
+        intensity={1.2}
         distance={3.5}
         color={accent}
       />
-      <hemisphereLight args={["#ffffff", "#d4d4d8", 0.35]} />
+      <hemisphereLight args={["#ffffff", "#d4d4d8", 0.45]} />
 
-      <Bounds fit clip margin={1.45}>
-        <Rotator>
-          <DeviceMesh
-            device={device}
-            accent={accent}
-            emissiveIntensity={1.05}
-          />
-        </Rotator>
-      </Bounds>
+      <Rotator initialYaw={layout.initialYaw} speed={0.28}>
+        <group scale={layout.scale}>
+          <LightenHousings>
+            <DeviceMesh
+              device={device}
+              accent={accent}
+              emissiveIntensity={1.25}
+            />
+          </LightenHousings>
+        </group>
+      </Rotator>
     </Canvas>
   );
 }
