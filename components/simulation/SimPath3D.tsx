@@ -29,7 +29,7 @@ export function SimPath3D({
     <>
       <line>
         <primitive object={geometry} attach="geometry" />
-        <lineBasicMaterial color="#fb7185" linewidth={2} transparent opacity={0.9} />
+        <lineBasicMaterial color="#0891B2" linewidth={2} transparent opacity={0.85} />
       </line>
       {path.map((p, i) => (
         <mesh
@@ -38,7 +38,7 @@ export function SimPath3D({
           rotation={[-Math.PI / 2, 0, 0]}
         >
           <circleGeometry args={[0.18, 16]} />
-          <meshBasicMaterial color="#fb7185" transparent opacity={0.55} />
+          <meshBasicMaterial color="#0891B2" transparent opacity={0.5} />
         </mesh>
       ))}
     </>

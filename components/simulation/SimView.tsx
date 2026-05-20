@@ -126,7 +126,7 @@ function SimControls() {
           <div className="inline-flex items-center gap-1.5 text-muted-foreground">
             <Activity className="size-3.5 text-primary" />
             <span>
-              Threat actor walking the demo path. Cameras turn green when they see them.
+              Subject walking the demo path. Cameras turn green when they pick them up.
             </span>
           </div>
           <div
@@ -140,12 +140,12 @@ function SimControls() {
             {detectionCount > 0 ? (
               <>
                 <Zap className="size-3" />
-                {detectionCount} camera{detectionCount === 1 ? "" : "s"} seeing
+                {detectionCount} camera{detectionCount === 1 ? "" : "s"} on subject
               </>
             ) : (
               <>
                 <ShieldAlert className="size-3" />
-                Blind spot
+                Blind spot — no camera
               </>
             )}
           </div>
