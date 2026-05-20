@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { Download, Eye, FileDown, Receipt, Upload } from "lucide-react";
+import { Download, FileDown, Receipt, Upload } from "lucide-react";
+import { LogoMark } from "@/components/branding/Logo";
 import { useDesignStore, useCurrentDesign } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { ModeSwitcher } from "./ModeSwitcher";
@@ -66,9 +67,9 @@ export function TopBar() {
             href="/"
             className="flex shrink-0 items-center gap-2 text-[0.92rem] font-medium tracking-[-0.01em]"
           >
-            <div className="flex size-6 items-center justify-center rounded border border-border bg-card/60">
-              <Eye className="size-3 text-primary" />
-            </div>
+            <span className="flex size-6 items-center justify-center rounded border border-border bg-card/60 p-0.5 text-primary">
+              <LogoMark strokeWidth={1.8} />
+            </span>
             Deeper Vision
           </Link>
           <div className="h-4 w-px bg-border" />

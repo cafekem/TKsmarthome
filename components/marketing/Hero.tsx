@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Eye } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { LogoMark } from "@/components/branding/Logo";
 
 /**
  * Mountain-landscape hero. Layout and feel inspired by Cluely's landing:
@@ -59,9 +60,9 @@ export function Hero() {
             href="/"
             className="inline-flex items-center gap-2.5 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.25)]"
           >
-            <div className="flex size-7 items-center justify-center rounded-md bg-white/15 backdrop-blur-md ring-1 ring-white/25">
-              <Eye className="size-3.5" />
-            </div>
+            <span className="flex size-7 items-center justify-center rounded-md bg-white/15 backdrop-blur-md ring-1 ring-white/25 p-1">
+              <LogoMark strokeWidth={1.7} />
+            </span>
             <span className="text-[1.05rem] font-medium tracking-[-0.01em]">
               Deeper Vision
             </span>
@@ -98,16 +99,24 @@ export function Hero() {
           className="max-w-4xl text-center"
         >
           <h1
-            className="font-serif text-white text-[3.2rem] leading-[1.04] tracking-[-0.015em] sm:text-[5rem] md:text-[5.75rem]"
+            className="font-serif text-white text-[3rem] leading-[1.12] sm:text-[4.4rem] md:text-[5.1rem]"
             style={{
               fontStyle: "normal",
+              fontWeight: 400,
+              letterSpacing: "0.005em",
+              // Override the global font-feature-settings cascade so the
+              // serif renders with its own native metrics instead of inheriting
+              // Geist Sans' stylistic-set features.
+              fontFeatureSettings: '"liga", "kern"',
+              fontVariantLigatures: "common-ligatures",
               textShadow:
-                "0 1px 2px rgba(0,20,60,0.45), 0 8px 32px rgba(0,20,60,0.35), 0 2px 8px rgba(0,20,60,0.55)",
+                "0 1px 2px rgba(0,20,60,0.45), 0 6px 26px rgba(0,20,60,0.32), 0 2px 6px rgba(0,20,60,0.5)",
             }}
           >
             Design security systems
             <br />
-            the way you actually
+            the way you{" "}
+            <span style={{ fontStyle: "italic" }}>actually</span>
             <br />
             experience them.
           </h1>

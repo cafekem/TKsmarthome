@@ -1,11 +1,13 @@
-import { Eye } from "lucide-react";
+import { LogoMark } from "@/components/branding/Logo";
 
 export function Footer() {
   return (
     <footer className="border-t border-border/60 py-10">
       <div className="mx-auto max-w-6xl px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-[0.83rem] text-muted-foreground">
         <div className="flex items-center gap-2">
-          <Eye className="size-3.5 text-primary" />
+          <span className="flex size-4 items-center justify-center text-primary">
+            <LogoMark strokeWidth={1.8} />
+          </span>
           <span className="font-medium text-foreground/90">Deeper Vision</span>
           <span className="opacity-50">·</span>
           <span>
