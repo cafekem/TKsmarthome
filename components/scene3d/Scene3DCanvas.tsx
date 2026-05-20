@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Grid, OrbitControls } from "@react-three/drei";
+import {
+  AdaptiveDpr,
+  ContactShadows,
+  Grid,
+  OrbitControls,
+  Outlines,
+  RoundedBox,
+} from "@react-three/drei";
 import * as THREE from "three";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
 import { useSimStore } from "@/lib/sim-store";
@@ -57,13 +64,17 @@ export function Scene3DCanvas({
     <div className="absolute inset-0" style={{ width, height }}>
       <Canvas
         shadows
+        dpr={[1, 2]}
         camera={{
           position: cameraPos,
           fov: 45,
           near: 0.1,
           far: maxDim * 12,
         }}
-        onCreated={({ camera }) => {
+        onCreated={({ camera, gl }) => {
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = 1.05;
+          gl.outputColorSpace = THREE.SRGBColorSpace;
           const eye = new THREE.Vector3(
             cameraPos[0],
             cameraPos[1],
@@ -78,6 +89,7 @@ export function Scene3DCanvas({
         }}
         gl={{ antialias: true }}
       >
+        <AdaptiveDpr pixelated={false} />
         <color attach="background" args={["#0c0c0d"]} />
         <fog
           attach="fog"
@@ -127,6 +139,17 @@ export function Scene3DCanvas({
           <planeGeometry args={[span.x * 1.1, span.z * 1.1]} />
           <meshStandardMaterial color="#1a1a1d" roughness={0.85} metalness={0} />
         </mesh>
+
+        {/* Soft contact shadows under everything */}
+        <ContactShadows
+          position={[center.x, 0.005, center.z]}
+          opacity={0.42}
+          scale={Math.max(span.x, span.z) * 1.4}
+          blur={2.6}
+          far={6}
+          resolution={1024}
+          color="#000000"
+        />
 
         {/* Walls */}
         {floor.walls.map((wall) => (
@@ -322,58 +345,50 @@ function Device3D({
         ? s.triggeredSensors.has(device.id)
         : false
   );
-  // Cameras/sensors glow brighter when detecting; others use their normal color
-  const color = detecting ? "#34d399" : baseColor;
-  const emissiveIntensity = detecting ? 1.1 : 0.35;
+  const accent = detecting ? "#34d399" : baseColor;
+  const emissiveIntensity = detecting ? 1.2 : 0.55;
 
   return (
     <group position={[px, py, pz]}>
       {/* Pole from floor to device */}
       <mesh position={[0, -py / 2, 0]}>
-        <cylinderGeometry args={[0.02, 0.02, py, 8]} />
+        <cylinderGeometry args={[0.02, 0.025, py, 10]} />
         <meshStandardMaterial color="#3f3f46" roughness={0.6} />
       </mesh>
 
-      {/* Body */}
-      <mesh castShadow>
-        <sphereGeometry args={[detecting ? 0.16 : 0.12, 16, 16]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={color}
+      {/* Body — varies by device type, all wrapped in Outlines */}
+      {device.type === "camera" && (
+        <CameraBody
+          accent={accent}
+          rotation={rotation}
           emissiveIntensity={emissiveIntensity}
-          metalness={0.2}
-          roughness={0.5}
+          cameraType={device.cameraType}
         />
-      </mesh>
+      )}
+      {device.type === "reader" && (
+        <ReaderBody accent={accent} rotation={rotation} />
+      )}
+      {device.type === "sensor" && (
+        <SensorBody accent={accent} emissiveIntensity={emissiveIntensity} />
+      )}
+      {device.type === "network" && (
+        <NetworkBody accent={accent} networkType={device.networkType} />
+      )}
+
       {detecting && (
         <pointLight
           position={[0, 0, 0]}
-          color={color}
-          intensity={1.2}
-          distance={3.5}
+          color={accent}
+          intensity={1.4}
+          distance={4}
         />
       )}
-
-      {/* Direction marker */}
-      {(device.type === "camera" || device.type === "reader") && (
-        <mesh
-          rotation={[0, -rotation, 0]}
-          position={[Math.cos(rotation) * 0.18, 0, Math.sin(rotation) * 0.18]}
-        >
-          <coneGeometry args={[0.05, 0.12, 8]} />
-          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
-        </mesh>
-      )}
-
-      {/* TODO: Camera FOV wedge in 3D (currently breaks the renderer when
-         combined with the existing scene — see [Issue: 3D FOV wedge]).
-         For now coverage cones are shown in 2D only. */}
 
       {/* Sensor detection radius (semi-transparent ring on ground) */}
       {showCoverage && device.type === "sensor" && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -py + 0.005, 0]}>
           <ringGeometry args={[device.rangeMeters - 0.06, device.rangeMeters, 64]} />
-          <meshBasicMaterial color={color} transparent opacity={0.35} side={THREE.DoubleSide} />
+          <meshBasicMaterial color={accent} transparent opacity={0.35} side={THREE.DoubleSide} />
         </mesh>
       )}
 
@@ -383,9 +398,200 @@ function Device3D({
         device.networkType === "access-point" && (
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -py + 0.005, 0]}>
             <circleGeometry args={[device.coverageMeters ?? 15, 64]} />
-            <meshBasicMaterial color={color} transparent opacity={0.08} />
+            <meshBasicMaterial color={accent} transparent opacity={0.08} />
           </mesh>
         )}
+    </group>
+  );
+}
+
+function CameraBody({
+  accent,
+  rotation,
+  emissiveIntensity,
+  cameraType,
+}: {
+  accent: string;
+  rotation: number;
+  emissiveIntensity: number;
+  cameraType: "fixed" | "ptz" | "dome" | "fisheye";
+}) {
+  // Dome cameras look like a hemisphere on a wall plate; others are a small
+  // boxy housing with a lens cylinder facing rotation.
+  if (cameraType === "dome" || cameraType === "fisheye") {
+    return (
+      <group>
+        <RoundedBox args={[0.32, 0.06, 0.32]} radius={0.012} smoothness={4} castShadow>
+          <meshStandardMaterial color="#27272a" roughness={0.65} />
+          <Outlines thickness={0.012} color="#52525b" opacity={0.7} transparent />
+        </RoundedBox>
+        <mesh position={[0, -0.05, 0]} castShadow>
+          <sphereGeometry args={[0.14, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color="#0a0a0a" roughness={0.4} metalness={0.3} />
+        </mesh>
+        {/* Lens dot */}
+        <mesh position={[0, -0.13, 0]}>
+          <sphereGeometry args={[0.025, 16, 16]} />
+          <meshStandardMaterial
+            color={accent}
+            emissive={accent}
+            emissiveIntensity={emissiveIntensity}
+          />
+        </mesh>
+      </group>
+    );
+  }
+  // Fixed / PTZ — box body, lens facing the camera's rotation direction
+  return (
+    <group rotation={[0, -rotation, 0]}>
+      <RoundedBox args={[0.18, 0.16, 0.28]} radius={0.025} smoothness={4} castShadow>
+        <meshStandardMaterial color="#1f1f23" roughness={0.6} metalness={0.2} />
+        <Outlines thickness={0.014} color="#52525b" opacity={0.7} transparent />
+      </RoundedBox>
+      {/* Lens barrel */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.2]} castShadow>
+        <cylinderGeometry args={[0.06, 0.07, 0.12, 18]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.4} metalness={0.4} />
+      </mesh>
+      {/* Lens iris */}
+      <mesh position={[0, 0, 0.27]}>
+        <circleGeometry args={[0.05, 24]} />
+        <meshStandardMaterial
+          color={accent}
+          emissive={accent}
+          emissiveIntensity={emissiveIntensity}
+        />
+      </mesh>
+      {/* Top mount tab */}
+      <RoundedBox
+        args={[0.06, 0.05, 0.08]}
+        radius={0.012}
+        smoothness={3}
+        position={[0, 0.105, -0.04]}
+      >
+        <meshStandardMaterial color="#27272a" roughness={0.7} />
+      </RoundedBox>
+    </group>
+  );
+}
+
+function ReaderBody({ accent, rotation }: { accent: string; rotation: number }) {
+  return (
+    <group rotation={[0, -rotation, 0]}>
+      <RoundedBox args={[0.16, 0.24, 0.04]} radius={0.018} smoothness={4} castShadow>
+        <meshStandardMaterial color="#1f1f23" roughness={0.6} metalness={0.15} />
+        <Outlines thickness={0.012} color="#52525b" opacity={0.7} transparent />
+      </RoundedBox>
+      {/* Reader screen */}
+      <mesh position={[0, 0.04, 0.022]}>
+        <planeGeometry args={[0.1, 0.06]} />
+        <meshStandardMaterial
+          color={accent}
+          emissive={accent}
+          emissiveIntensity={0.7}
+        />
+      </mesh>
+      {/* Card area */}
+      <RoundedBox
+        args={[0.1, 0.08, 0.012]}
+        radius={0.012}
+        smoothness={3}
+        position={[0, -0.06, 0.022]}
+      >
+        <meshStandardMaterial color="#0a0a0a" roughness={0.5} />
+      </RoundedBox>
+    </group>
+  );
+}
+
+function SensorBody({
+  accent,
+  emissiveIntensity,
+}: {
+  accent: string;
+  emissiveIntensity: number;
+}) {
+  return (
+    <group>
+      {/* Hemispherical dome */}
+      <mesh castShadow>
+        <sphereGeometry args={[0.1, 24, 18, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial color="#f1f1ef" roughness={0.55} />
+      </mesh>
+      {/* Base plate */}
+      <RoundedBox
+        args={[0.24, 0.04, 0.24]}
+        radius={0.01}
+        smoothness={4}
+        position={[0, -0.02, 0]}
+        castShadow
+      >
+        <meshStandardMaterial color="#e7e5e4" roughness={0.7} />
+        <Outlines thickness={0.012} color="#a8a29e" opacity={0.55} transparent />
+      </RoundedBox>
+      {/* Indicator LED */}
+      <mesh position={[0, 0.02, 0.105]}>
+        <sphereGeometry args={[0.014, 12, 12]} />
+        <meshStandardMaterial
+          color={accent}
+          emissive={accent}
+          emissiveIntensity={emissiveIntensity}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function NetworkBody({
+  accent,
+  networkType,
+}: {
+  accent: string;
+  networkType: "switch" | "access-point" | "nvr";
+}) {
+  if (networkType === "access-point") {
+    return (
+      <group>
+        {/* Flat disc puck */}
+        <mesh castShadow>
+          <cylinderGeometry args={[0.16, 0.18, 0.06, 24]} />
+          <meshStandardMaterial color="#f5f5f4" roughness={0.6} />
+        </mesh>
+        {/* Bottom logo dot */}
+        <mesh position={[0, -0.035, 0]}>
+          <cylinderGeometry args={[0.05, 0.05, 0.005, 16]} />
+          <meshStandardMaterial
+            color={accent}
+            emissive={accent}
+            emissiveIntensity={0.6}
+          />
+        </mesh>
+      </group>
+    );
+  }
+  // switch / NVR — 1U rackmount-ish horizontal box
+  return (
+    <group>
+      <RoundedBox args={[0.4, 0.12, 0.22]} radius={0.014} smoothness={4} castShadow>
+        <meshStandardMaterial color="#27272a" roughness={0.55} metalness={0.25} />
+        <Outlines thickness={0.012} color="#52525b" opacity={0.6} transparent />
+      </RoundedBox>
+      {/* Port row */}
+      <mesh position={[0, 0.005, 0.11]}>
+        <planeGeometry args={[0.32, 0.04]} />
+        <meshStandardMaterial color="#0a0a0a" />
+      </mesh>
+      {/* Tiny status LEDs */}
+      {[-0.14, -0.07, 0, 0.07, 0.14].map((x) => (
+        <mesh key={x} position={[x, 0.025, 0.111]}>
+          <sphereGeometry args={[0.008, 8, 8]} />
+          <meshStandardMaterial
+            color={accent}
+            emissive={accent}
+            emissiveIntensity={0.6}
+          />
+        </mesh>
+      ))}
     </group>
   );
 }
