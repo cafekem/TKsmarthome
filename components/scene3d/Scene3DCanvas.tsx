@@ -1,24 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import {
   AdaptiveDpr,
   ContactShadows,
   Grid,
   OrbitControls,
-  Outlines,
-  RoundedBox,
 } from "@react-three/drei";
 import * as THREE from "three";
 import { useTheme } from "next-themes";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
 import { useSimStore } from "@/lib/sim-store";
-import type { Device, Floor, Wall } from "@/types/design";
+import type { Device, DeviceType, Floor, Wall } from "@/types/design";
 import { WalkController } from "./WalkController";
 import { SimController } from "@/components/simulation/SimController";
 import { Actor3D } from "@/components/simulation/Actor3D";
 import { SimPath3D } from "@/components/simulation/SimPath3D";
+import { DeviceMesh } from "./DeviceMesh";
 
 interface Scene3DCanvasProps {
   width: number;
@@ -32,6 +31,11 @@ const DEVICE_COLORS = {
   network: "#a78bfa",
 } as const;
 
+interface CameraHandles {
+  camera: THREE.PerspectiveCamera | null;
+  gl: THREE.WebGLRenderer | null;
+}
+
 export function Scene3DCanvas({
   width,
   height,
@@ -41,6 +45,11 @@ export function Scene3DCanvas({
   const showCoverage = useDesignStore((s) => s.showCoverage);
   const threeDMode = useDesignStore((s) => s.threeDMode);
   const setThreeDMode = useDesignStore((s) => s.setThreeDMode);
+  const addDevice = useDesignStore((s) => s.addDevice);
+  const selectedDeviceId = useDesignStore((s) => s.selectedDeviceId);
+  const selectDevice = useDesignStore((s) => s.selectDevice);
+  const updateDevice = useDesignStore((s) => s.updateDevice);
+
   const { resolvedTheme } = useTheme();
   const [mountedTheme, setMountedTheme] = useState<"light" | "dark">("dark");
   useEffect(() => {
@@ -55,16 +64,20 @@ export function Scene3DCanvas({
 
   const frame = useMemo(() => floor && computeFrame(floor), [floor]);
 
-  if (!floor || !frame) {
-    return null;
-  }
+  // Camera + renderer handles, captured from inside the Canvas via the
+  // <SceneExporter /> component below so the wrapper can raycast for drops.
+  const handlesRef = useRef<CameraHandles>({ camera: null, gl: null });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Used to temporarily disable OrbitControls while a device is being dragged
+  const [orbitEnabled, setOrbitEnabled] = useState(true);
+
+  if (!floor || !frame) return null;
+  const currentFloor = floor;
 
   const { center, span, cameraPos } = frame;
   const maxDim = Math.max(span.x, span.z, 6);
 
-  // Find a good walk spawn point: floor center at human eye height, with the
-  // camera initially facing toward the building center (so the user is at the
-  // edge looking in).
   const walkSpawn: [number, number, number] = [
     center.x - span.x * 0.3,
     1.65,
@@ -72,8 +85,54 @@ export function Scene3DCanvas({
   ];
   const walkLookAt: [number, number, number] = [center.x, 1.5, center.z];
 
+  /**
+   * Raycast a (clientX, clientY) into the scene, return the hit point on the
+   * floor (y=0) in floor-plan pixel coords, or null if camera not ready.
+   */
+  function dropPointToPx(clientX: number, clientY: number): {
+    x: number;
+    y: number;
+  } | null {
+    const { camera } = handlesRef.current;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!camera || !rect) return null;
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, camera);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const hit = new THREE.Vector3();
+    if (!ray.ray.intersectPlane(plane, hit)) return null;
+    return { x: hit.x * currentFloor.scale, y: hit.z * currentFloor.scale };
+  }
+
+  function onContainerDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData("application/x-dv-device");
+    if (!raw) return;
+    try {
+      const payload = JSON.parse(raw) as { type: DeviceType };
+      const px = dropPointToPx(e.clientX, e.clientY);
+      if (!px) return;
+      addDevice(currentFloor.id, payload.type, px);
+    } catch {
+      // ignore
+    }
+  }
+
   return (
-    <div className="absolute inset-0" style={{ width, height }}>
+    <div
+      ref={containerRef}
+      className="absolute inset-0"
+      style={{ width, height }}
+      onDrop={onContainerDrop}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }}
+    >
       <Canvas
         shadows
         dpr={[1, 2]}
@@ -84,6 +143,8 @@ export function Scene3DCanvas({
           far: maxDim * 12,
         }}
         onCreated={({ camera, gl }) => {
+          handlesRef.current.camera = camera as THREE.PerspectiveCamera;
+          handlesRef.current.gl = gl;
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1.05;
           gl.outputColorSpace = THREE.SRGBColorSpace;
@@ -100,6 +161,10 @@ export function Scene3DCanvas({
           camera.updateMatrixWorld(true);
         }}
         gl={{ antialias: true }}
+        onPointerMissed={() => {
+          // Clicking empty floor area in orbit mode deselects whatever was selected
+          if (threeDMode === "orbit") selectDevice(null);
+        }}
       >
         <AdaptiveDpr pixelated={false} />
         <color attach="background" args={[bgColor]} />
@@ -149,7 +214,6 @@ export function Scene3DCanvas({
           <meshStandardMaterial color={floorColor} roughness={0.85} metalness={0} />
         </mesh>
 
-        {/* Soft contact shadows under everything */}
         <ContactShadows
           position={[center.x, 0.005, center.z]}
           opacity={isLight ? 0.28 : 0.42}
@@ -160,7 +224,6 @@ export function Scene3DCanvas({
           color="#000000"
         />
 
-        {/* Walls */}
         {floor.walls.map((wall) => (
           <Wall3D
             key={wall.id}
@@ -171,17 +234,22 @@ export function Scene3DCanvas({
           />
         ))}
 
-        {/* Devices */}
         {floor.devices.map((device) => (
           <Device3D
             key={device.id}
             device={device}
             scale={floor.scale}
             showCoverage={showCoverage}
+            selected={selectedDeviceId === device.id}
+            editable={threeDMode === "orbit" && !showSim}
+            onSelect={() => selectDevice(device.id)}
+            onDragStateChange={(dragging) => setOrbitEnabled(!dragging)}
+            onMove={(positionPx) =>
+              updateDevice(floor.id, device.id, { position: positionPx })
+            }
           />
         ))}
 
-        {/* Simulation overlay: actor + path */}
         {showSim && floor.simPath && floor.simPath.length >= 2 && (
           <>
             <SimPath3D path={floor.simPath} scale={floor.scale} />
@@ -194,6 +262,7 @@ export function Scene3DCanvas({
           <>
             <OrbitControls
               makeDefault
+              enabled={orbitEnabled}
               enableDamping={false}
               minDistance={1}
               maxDistance={maxDim * 4}
@@ -219,12 +288,6 @@ export function Scene3DCanvas({
   );
 }
 
-/**
- * Forces the camera to its initial framing on mount, AFTER OrbitControls is
- * registered. Passing `camera` + `target` as props alone is not enough —
- * OrbitControls' damping can lock the rotation in before the camera has had
- * a chance to look at the scene center, producing a black first frame.
- */
 function FramingInit({
   cameraPos,
   target,
@@ -252,11 +315,6 @@ function FramingInit({
   return null;
 }
 
-/**
- * Compute scene bounds in meters from the floor's data, and a sensible camera
- * position framed on that center. Returns center (world point to look at),
- * span (extents in X and Z), and cameraPos (initial camera position).
- */
 function computeFrame(floor: Floor) {
   const xs: number[] = [];
   const ys: number[] = [];
@@ -268,7 +326,6 @@ function computeFrame(floor: Floor) {
     xs.push(w.start.x, w.end.x);
     ys.push(w.start.y, w.end.y);
   }
-  // Default to a small room if there's nothing to bound on yet
   let minX = 0;
   let maxX = 400;
   let minY = 0;
@@ -288,15 +345,10 @@ function computeFrame(floor: Floor) {
     z: Math.max((maxY - minY) / floor.scale, 6),
   };
   const maxDim = Math.max(span.x, span.z);
-  // Stand back along the SE diagonal at a height that comfortably clears the
-  // walls (~2.7-3m). Distances picked so the building's diagonal fills ~80%
-  // of a 40° FOV viewport — close enough that you can read individual devices
-  // without losing the overall floor-plan context. The user can orbit from
-  // there.
   const cameraPos: [number, number, number] = [
-    center.x + maxDim * 0.45,
-    Math.max(maxDim * 0.6, 8),
-    center.z + maxDim * 0.7,
+    center.x + maxDim * 0.55,
+    Math.max(maxDim * 0.75, 9),
+    center.z + maxDim * 0.85,
   ];
   return { center, span, cameraPos };
 }
@@ -312,9 +364,6 @@ function Wall3D({
   ceilingHeight: number;
   color?: string;
 }) {
-  // Convert from floor-plan pixels to world meters. The plan's +Y in pixel
-  // space maps to world +Z so the design's top-down view still reads
-  // top-down in 3D from a default camera looking down -Z.
   const start = { x: wall.start.x / scale, z: wall.start.y / scale };
   const end = { x: wall.end.x / scale, z: wall.end.y / scale };
   const dx = end.x - start.x;
@@ -338,20 +387,34 @@ function Wall3D({
   );
 }
 
+interface Device3DProps {
+  device: Device;
+  scale: number;
+  showCoverage: boolean;
+  selected: boolean;
+  editable: boolean;
+  onSelect: () => void;
+  onDragStateChange: (dragging: boolean) => void;
+  onMove: (positionPx: { x: number; y: number }) => void;
+}
+
 function Device3D({
   device,
   scale,
   showCoverage,
-}: {
-  device: Device;
-  scale: number;
-  showCoverage: boolean;
-}) {
+  selected,
+  editable,
+  onSelect,
+  onDragStateChange,
+  onMove,
+}: Device3DProps) {
+  const groupRef = useRef<THREE.Group>(null);
+  const dragOffsetRef = useRef<{ x: number; z: number } | null>(null);
+
   const px = device.position.x / scale;
   const pz = device.position.y / scale;
   const py = device.mountHeight;
   const baseColor = DEVICE_COLORS[device.type];
-  const rotation = device.rotation;
   const detecting = useSimStore((s) =>
     device.type === "camera"
       ? s.detectingCameras.has(device.id)
@@ -362,32 +425,86 @@ function Device3D({
   const accent = detecting ? "#34d399" : baseColor;
   const emissiveIntensity = detecting ? 1.2 : 0.55;
 
+  function intersectFloor(e: ThreeEvent<PointerEvent>): {
+    wx: number;
+    wz: number;
+  } | null {
+    const ray = e.ray;
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const hit = new THREE.Vector3();
+    if (!ray.intersectPlane(plane, hit)) return null;
+    return { wx: hit.x, wz: hit.z };
+  }
+
+  function handlePointerDown(e: ThreeEvent<PointerEvent>) {
+    if (!editable) return;
+    e.stopPropagation();
+    onSelect();
+    const target = e.target as Element | null;
+    if (target && "setPointerCapture" in target) {
+      try {
+        target.setPointerCapture(e.pointerId);
+      } catch {
+        // ignore — capture is best-effort
+      }
+    }
+    const hit = intersectFloor(e);
+    if (!hit) return;
+    dragOffsetRef.current = { x: hit.wx - px, z: hit.wz - pz };
+    onDragStateChange(true);
+  }
+
+  function handlePointerMove(e: ThreeEvent<PointerEvent>) {
+    if (!dragOffsetRef.current) return;
+    e.stopPropagation();
+    const hit = intersectFloor(e);
+    if (!hit) return;
+    const newWx = hit.wx - dragOffsetRef.current.x;
+    const newWz = hit.wz - dragOffsetRef.current.z;
+    onMove({ x: newWx * scale, y: newWz * scale });
+  }
+
+  function handlePointerUp(e: ThreeEvent<PointerEvent>) {
+    if (!dragOffsetRef.current) return;
+    e.stopPropagation();
+    dragOffsetRef.current = null;
+    onDragStateChange(false);
+    const target = e.target as Element | null;
+    if (target && "releasePointerCapture" in target) {
+      try {
+        target.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   return (
-    <group position={[px, py, pz]}>
-      {/* Pole from floor to device */}
+    <group
+      ref={groupRef}
+      position={[px, py, pz]}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onClick={(e) => {
+        if (!editable) return;
+        e.stopPropagation();
+        onSelect();
+      }}
+    >
+      {/* Mounting pole from floor to device — short stub if the device has a
+         wall mount of its own; full pole otherwise. */}
       <mesh position={[0, -py / 2, 0]}>
-        <cylinderGeometry args={[0.02, 0.025, py, 10]} />
-        <meshStandardMaterial color="#3f3f46" roughness={0.6} />
+        <cylinderGeometry args={[0.018, 0.028, py, 12]} />
+        <meshStandardMaterial color="#3f3f46" roughness={0.55} metalness={0.4} />
       </mesh>
 
-      {/* Body — varies by device type, all wrapped in Outlines */}
-      {device.type === "camera" && (
-        <CameraBody
-          accent={accent}
-          rotation={rotation}
-          emissiveIntensity={emissiveIntensity}
-          cameraType={device.cameraType}
-        />
-      )}
-      {device.type === "reader" && (
-        <ReaderBody accent={accent} rotation={rotation} />
-      )}
-      {device.type === "sensor" && (
-        <SensorBody accent={accent} emissiveIntensity={emissiveIntensity} />
-      )}
-      {device.type === "network" && (
-        <NetworkBody accent={accent} networkType={device.networkType} />
-      )}
+      <DeviceMesh
+        device={device}
+        accent={accent}
+        emissiveIntensity={emissiveIntensity}
+      />
 
       {detecting && (
         <pointLight
@@ -398,11 +515,34 @@ function Device3D({
         />
       )}
 
+      {/* Selection halo on the floor */}
+      {selected && (
+        <mesh
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, -py + 0.01, 0]}
+        >
+          <ringGeometry args={[0.45, 0.55, 48]} />
+          <meshBasicMaterial
+            color="#34d399"
+            transparent
+            opacity={0.85}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+
       {/* Sensor detection radius (semi-transparent ring on ground) */}
       {showCoverage && device.type === "sensor" && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -py + 0.005, 0]}>
-          <ringGeometry args={[device.rangeMeters - 0.06, device.rangeMeters, 64]} />
-          <meshBasicMaterial color={accent} transparent opacity={0.35} side={THREE.DoubleSide} />
+          <ringGeometry
+            args={[device.rangeMeters - 0.06, device.rangeMeters, 64]}
+          />
+          <meshBasicMaterial
+            color={accent}
+            transparent
+            opacity={0.35}
+            side={THREE.DoubleSide}
+          />
         </mesh>
       )}
 
@@ -410,7 +550,10 @@ function Device3D({
       {showCoverage &&
         device.type === "network" &&
         device.networkType === "access-point" && (
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -py + 0.005, 0]}>
+          <mesh
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[0, -py + 0.005, 0]}
+          >
             <circleGeometry args={[device.coverageMeters ?? 15, 64]} />
             <meshBasicMaterial color={accent} transparent opacity={0.08} />
           </mesh>
@@ -418,317 +561,3 @@ function Device3D({
     </group>
   );
 }
-
-function CameraBody({
-  accent,
-  rotation,
-  emissiveIntensity,
-  cameraType,
-}: {
-  accent: string;
-  rotation: number;
-  emissiveIntensity: number;
-  cameraType: "fixed" | "ptz" | "dome" | "fisheye";
-}) {
-  if (cameraType === "dome" || cameraType === "fisheye") {
-    // Ceiling-mounted dome on a wall plate, with a visible IR ring and a tinted
-    // half-sphere — large enough to read from the orbit camera.
-    return (
-      <group>
-        {/* Wall / ceiling plate */}
-        <RoundedBox
-          args={[0.4, 0.06, 0.4]}
-          radius={0.018}
-          smoothness={4}
-          castShadow
-        >
-          <meshStandardMaterial color="#1f2024" roughness={0.55} metalness={0.2} />
-          <Outlines
-            thickness={0.014}
-            color="#52525b"
-            opacity={0.75}
-            transparent
-          />
-        </RoundedBox>
-        {/* Inner ring (IR illuminator) */}
-        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -0.045, 0]}>
-          <ringGeometry args={[0.13, 0.17, 32]} />
-          <meshStandardMaterial color="#0a0a0a" roughness={0.4} />
-        </mesh>
-        {/* Tinted dome */}
-        <mesh position={[0, -0.05, 0]} castShadow>
-          <sphereGeometry
-            args={[0.18, 32, 24, 0, Math.PI * 2, 0, Math.PI / 2]}
-          />
-          <meshPhysicalMaterial
-            color="#0a0a0a"
-            transparent
-            opacity={0.55}
-            roughness={0.15}
-            metalness={0.4}
-            transmission={0.25}
-          />
-        </mesh>
-        {/* Inner lens body (visible through the tint) */}
-        <mesh position={[0, -0.12, 0]}>
-          <sphereGeometry args={[0.07, 16, 16]} />
-          <meshStandardMaterial color="#18181b" roughness={0.5} metalness={0.3} />
-        </mesh>
-        {/* Active iris */}
-        <mesh position={[0, -0.16, 0]}>
-          <sphereGeometry args={[0.028, 16, 16]} />
-          <meshStandardMaterial
-            color={accent}
-            emissive={accent}
-            emissiveIntensity={emissiveIntensity}
-          />
-        </mesh>
-        {/* Status LED on plate edge */}
-        <mesh position={[0.16, 0.005, 0]}>
-          <sphereGeometry args={[0.012, 8, 8]} />
-          <meshStandardMaterial
-            color={accent}
-            emissive={accent}
-            emissiveIntensity={emissiveIntensity}
-          />
-        </mesh>
-      </group>
-    );
-  }
-
-  // PTZ has a visible pan-yoke + tilt-arm; fixed is a simple bullet camera on
-  // a mount arm. Both face along the camera's rotation direction.
-  const isPTZ = cameraType === "ptz";
-
-  return (
-    <group rotation={[0, -rotation, 0]}>
-      {/* Mounting arm coming out of the wall (negative X is "wall side") */}
-      <mesh position={[-0.16, 0, 0]} castShadow>
-        <cylinderGeometry args={[0.025, 0.025, 0.12, 12]} />
-        <meshStandardMaterial color="#3f3f46" roughness={0.55} metalness={0.5} />
-      </mesh>
-      {/* Wall plate */}
-      <RoundedBox
-        args={[0.05, 0.16, 0.16]}
-        radius={0.014}
-        smoothness={4}
-        position={[-0.245, 0, 0]}
-        castShadow
-      >
-        <meshStandardMaterial color="#27272a" roughness={0.55} />
-        <Outlines thickness={0.012} color="#52525b" opacity={0.6} transparent />
-      </RoundedBox>
-
-      {isPTZ ? (
-        <>
-          {/* PTZ yoke (the U-shaped support) */}
-          <mesh position={[0, 0.13, 0]} castShadow>
-            <cylinderGeometry args={[0.05, 0.05, 0.05, 16]} />
-            <meshStandardMaterial color="#3f3f46" roughness={0.5} metalness={0.4} />
-          </mesh>
-          {/* Spherical head */}
-          <mesh castShadow>
-            <sphereGeometry args={[0.16, 32, 24]} />
-            <meshStandardMaterial color="#18181b" roughness={0.5} metalness={0.4} />
-          </mesh>
-        </>
-      ) : (
-        <>
-          {/* Bullet housing */}
-          <RoundedBox
-            args={[0.36, 0.2, 0.22]}
-            radius={0.035}
-            smoothness={5}
-            castShadow
-          >
-            <meshStandardMaterial color="#1f2024" roughness={0.5} metalness={0.3} />
-            <Outlines
-              thickness={0.014}
-              color="#52525b"
-              opacity={0.7}
-              transparent
-            />
-          </RoundedBox>
-          {/* Sunshade / hood on top */}
-          <RoundedBox
-            args={[0.4, 0.04, 0.26]}
-            radius={0.015}
-            smoothness={4}
-            position={[0.02, 0.13, 0]}
-            castShadow
-          >
-            <meshStandardMaterial color="#0d0e10" roughness={0.6} />
-          </RoundedBox>
-          {/* Brand strip */}
-          <mesh position={[0, 0.05, 0.111]}>
-            <planeGeometry args={[0.18, 0.025]} />
-            <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.5} />
-          </mesh>
-          {/* Status LED beside the lens */}
-          <mesh position={[0.18, -0.06, 0.05]}>
-            <sphereGeometry args={[0.012, 10, 10]} />
-            <meshStandardMaterial
-              color={accent}
-              emissive={accent}
-              emissiveIntensity={emissiveIntensity}
-            />
-          </mesh>
-        </>
-      )}
-
-      {/* Lens barrel — protrudes from the front of either variant */}
-      <mesh
-        rotation={[0, 0, Math.PI / 2]}
-        position={[isPTZ ? 0.18 : 0.22, 0, 0]}
-        castShadow
-      >
-        <cylinderGeometry args={[0.08, 0.09, 0.12, 24]} />
-        <meshStandardMaterial color="#09090b" roughness={0.4} metalness={0.5} />
-      </mesh>
-      {/* Objective ring */}
-      <mesh
-        rotation={[0, 0, Math.PI / 2]}
-        position={[isPTZ ? 0.24 : 0.28, 0, 0]}
-      >
-        <torusGeometry args={[0.082, 0.012, 12, 24]} />
-        <meshStandardMaterial color="#3f3f46" roughness={0.3} metalness={0.7} />
-      </mesh>
-      {/* Glass iris */}
-      <mesh
-        rotation={[0, 0, Math.PI / 2]}
-        position={[isPTZ ? 0.245 : 0.286, 0, 0]}
-      >
-        <circleGeometry args={[0.07, 32]} />
-        <meshStandardMaterial
-          color={accent}
-          emissive={accent}
-          emissiveIntensity={emissiveIntensity * 0.9}
-          roughness={0.2}
-          metalness={0.4}
-        />
-      </mesh>
-    </group>
-  );
-}
-
-function ReaderBody({ accent, rotation }: { accent: string; rotation: number }) {
-  return (
-    <group rotation={[0, -rotation, 0]}>
-      <RoundedBox args={[0.16, 0.24, 0.04]} radius={0.018} smoothness={4} castShadow>
-        <meshStandardMaterial color="#1f1f23" roughness={0.6} metalness={0.15} />
-        <Outlines thickness={0.012} color="#52525b" opacity={0.7} transparent />
-      </RoundedBox>
-      {/* Reader screen */}
-      <mesh position={[0, 0.04, 0.022]}>
-        <planeGeometry args={[0.1, 0.06]} />
-        <meshStandardMaterial
-          color={accent}
-          emissive={accent}
-          emissiveIntensity={0.7}
-        />
-      </mesh>
-      {/* Card area */}
-      <RoundedBox
-        args={[0.1, 0.08, 0.012]}
-        radius={0.012}
-        smoothness={3}
-        position={[0, -0.06, 0.022]}
-      >
-        <meshStandardMaterial color="#0a0a0a" roughness={0.5} />
-      </RoundedBox>
-    </group>
-  );
-}
-
-function SensorBody({
-  accent,
-  emissiveIntensity,
-}: {
-  accent: string;
-  emissiveIntensity: number;
-}) {
-  return (
-    <group>
-      {/* Hemispherical dome */}
-      <mesh castShadow>
-        <sphereGeometry args={[0.1, 24, 18, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial color="#f1f1ef" roughness={0.55} />
-      </mesh>
-      {/* Base plate */}
-      <RoundedBox
-        args={[0.24, 0.04, 0.24]}
-        radius={0.01}
-        smoothness={4}
-        position={[0, -0.02, 0]}
-        castShadow
-      >
-        <meshStandardMaterial color="#e7e5e4" roughness={0.7} />
-        <Outlines thickness={0.012} color="#a8a29e" opacity={0.55} transparent />
-      </RoundedBox>
-      {/* Indicator LED */}
-      <mesh position={[0, 0.02, 0.105]}>
-        <sphereGeometry args={[0.014, 12, 12]} />
-        <meshStandardMaterial
-          color={accent}
-          emissive={accent}
-          emissiveIntensity={emissiveIntensity}
-        />
-      </mesh>
-    </group>
-  );
-}
-
-function NetworkBody({
-  accent,
-  networkType,
-}: {
-  accent: string;
-  networkType: "switch" | "access-point" | "nvr";
-}) {
-  if (networkType === "access-point") {
-    return (
-      <group>
-        {/* Flat disc puck */}
-        <mesh castShadow>
-          <cylinderGeometry args={[0.16, 0.18, 0.06, 24]} />
-          <meshStandardMaterial color="#f5f5f4" roughness={0.6} />
-        </mesh>
-        {/* Bottom logo dot */}
-        <mesh position={[0, -0.035, 0]}>
-          <cylinderGeometry args={[0.05, 0.05, 0.005, 16]} />
-          <meshStandardMaterial
-            color={accent}
-            emissive={accent}
-            emissiveIntensity={0.6}
-          />
-        </mesh>
-      </group>
-    );
-  }
-  // switch / NVR — 1U rackmount-ish horizontal box
-  return (
-    <group>
-      <RoundedBox args={[0.4, 0.12, 0.22]} radius={0.014} smoothness={4} castShadow>
-        <meshStandardMaterial color="#27272a" roughness={0.55} metalness={0.25} />
-        <Outlines thickness={0.012} color="#52525b" opacity={0.6} transparent />
-      </RoundedBox>
-      {/* Port row */}
-      <mesh position={[0, 0.005, 0.11]}>
-        <planeGeometry args={[0.32, 0.04]} />
-        <meshStandardMaterial color="#0a0a0a" />
-      </mesh>
-      {/* Tiny status LEDs */}
-      {[-0.14, -0.07, 0, 0.07, 0.14].map((x) => (
-        <mesh key={x} position={[x, 0.025, 0.111]}>
-          <sphereGeometry args={[0.008, 8, 8]} />
-          <meshStandardMaterial
-            color={accent}
-            emissive={accent}
-            emissiveIntensity={0.6}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
