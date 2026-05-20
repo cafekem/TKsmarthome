@@ -1,5 +1,30 @@
 import type { CameraDevice, SensorDevice, Vec2, Wall } from "@/types/design";
-import { distance, pointNearSegment } from "./geometry";
+import { distance, pointNearSegment, pointToSegment } from "./geometry";
+
+/**
+ * Push a point out of every wall it's penetrating (in floor-plan pixel
+ * space). `radiusPx` is the actor's circular collider radius in pixels.
+ * Runs two passes so corner cases — being inside two walls at once — settle.
+ */
+export function collideAgainstWalls(
+  pos: Vec2,
+  walls: Wall[],
+  radiusPx: number
+): Vec2 {
+  let x = pos.x;
+  let y = pos.y;
+  for (let pass = 0; pass < 2; pass++) {
+    for (const w of walls) {
+      const r = pointToSegment(x, y, w.start.x, w.start.y, w.end.x, w.end.y);
+      if (r.dist < radiusPx) {
+        const push = radiusPx - r.dist + 0.5;
+        x += r.nx * push;
+        y += r.nz * push;
+      }
+    }
+  }
+  return { x, y };
+}
 
 /**
  * Returns true if the line segment from a to b is clear of every wall.

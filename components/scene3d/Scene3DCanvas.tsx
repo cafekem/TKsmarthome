@@ -79,7 +79,7 @@ export function Scene3DCanvas({
         dpr={[1, 2]}
         camera={{
           position: cameraPos,
-          fov: 45,
+          fov: 38,
           near: 0.1,
           far: maxDim * 12,
         }}
@@ -288,13 +288,15 @@ function computeFrame(floor: Floor) {
     z: Math.max((maxY - minY) / floor.scale, 6),
   };
   const maxDim = Math.max(span.x, span.z);
-  // Stand high and offset along the SE diagonal so the whole building reads
-  // top-down-ish from outside; the user can orbit from there. Walls are
-  // 2.7m tall, so we lift the camera well above that.
+  // Stand back along the SE diagonal at a height that comfortably clears the
+  // walls (~2.7-3m). Distances picked so the building's diagonal fills ~80%
+  // of a 40° FOV viewport — close enough that you can read individual devices
+  // without losing the overall floor-plan context. The user can orbit from
+  // there.
   const cameraPos: [number, number, number] = [
-    center.x + maxDim * 0.6,
-    Math.max(maxDim * 1.1, 12),
-    center.z + maxDim * 1.05,
+    center.x + maxDim * 0.45,
+    Math.max(maxDim * 0.6, 8),
+    center.z + maxDim * 0.7,
   ];
   return { center, span, cameraPos };
 }
@@ -428,22 +430,62 @@ function CameraBody({
   emissiveIntensity: number;
   cameraType: "fixed" | "ptz" | "dome" | "fisheye";
 }) {
-  // Dome cameras look like a hemisphere on a wall plate; others are a small
-  // boxy housing with a lens cylinder facing rotation.
   if (cameraType === "dome" || cameraType === "fisheye") {
+    // Ceiling-mounted dome on a wall plate, with a visible IR ring and a tinted
+    // half-sphere — large enough to read from the orbit camera.
     return (
       <group>
-        <RoundedBox args={[0.32, 0.06, 0.32]} radius={0.012} smoothness={4} castShadow>
-          <meshStandardMaterial color="#27272a" roughness={0.65} />
-          <Outlines thickness={0.012} color="#52525b" opacity={0.7} transparent />
+        {/* Wall / ceiling plate */}
+        <RoundedBox
+          args={[0.4, 0.06, 0.4]}
+          radius={0.018}
+          smoothness={4}
+          castShadow
+        >
+          <meshStandardMaterial color="#1f2024" roughness={0.55} metalness={0.2} />
+          <Outlines
+            thickness={0.014}
+            color="#52525b"
+            opacity={0.75}
+            transparent
+          />
         </RoundedBox>
-        <mesh position={[0, -0.05, 0]} castShadow>
-          <sphereGeometry args={[0.14, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-          <meshStandardMaterial color="#0a0a0a" roughness={0.4} metalness={0.3} />
+        {/* Inner ring (IR illuminator) */}
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -0.045, 0]}>
+          <ringGeometry args={[0.13, 0.17, 32]} />
+          <meshStandardMaterial color="#0a0a0a" roughness={0.4} />
         </mesh>
-        {/* Lens dot */}
-        <mesh position={[0, -0.13, 0]}>
-          <sphereGeometry args={[0.025, 16, 16]} />
+        {/* Tinted dome */}
+        <mesh position={[0, -0.05, 0]} castShadow>
+          <sphereGeometry
+            args={[0.18, 32, 24, 0, Math.PI * 2, 0, Math.PI / 2]}
+          />
+          <meshPhysicalMaterial
+            color="#0a0a0a"
+            transparent
+            opacity={0.55}
+            roughness={0.15}
+            metalness={0.4}
+            transmission={0.25}
+          />
+        </mesh>
+        {/* Inner lens body (visible through the tint) */}
+        <mesh position={[0, -0.12, 0]}>
+          <sphereGeometry args={[0.07, 16, 16]} />
+          <meshStandardMaterial color="#18181b" roughness={0.5} metalness={0.3} />
+        </mesh>
+        {/* Active iris */}
+        <mesh position={[0, -0.16, 0]}>
+          <sphereGeometry args={[0.028, 16, 16]} />
+          <meshStandardMaterial
+            color={accent}
+            emissive={accent}
+            emissiveIntensity={emissiveIntensity}
+          />
+        </mesh>
+        {/* Status LED on plate edge */}
+        <mesh position={[0.16, 0.005, 0]}>
+          <sphereGeometry args={[0.012, 8, 8]} />
           <meshStandardMaterial
             color={accent}
             emissive={accent}
@@ -453,36 +495,118 @@ function CameraBody({
       </group>
     );
   }
-  // Fixed / PTZ — box body, lens facing the camera's rotation direction
+
+  // PTZ has a visible pan-yoke + tilt-arm; fixed is a simple bullet camera on
+  // a mount arm. Both face along the camera's rotation direction.
+  const isPTZ = cameraType === "ptz";
+
   return (
     <group rotation={[0, -rotation, 0]}>
-      <RoundedBox args={[0.18, 0.16, 0.28]} radius={0.025} smoothness={4} castShadow>
-        <meshStandardMaterial color="#1f1f23" roughness={0.6} metalness={0.2} />
-        <Outlines thickness={0.014} color="#52525b" opacity={0.7} transparent />
-      </RoundedBox>
-      {/* Lens barrel */}
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.2]} castShadow>
-        <cylinderGeometry args={[0.06, 0.07, 0.12, 18]} />
-        <meshStandardMaterial color="#0a0a0a" roughness={0.4} metalness={0.4} />
+      {/* Mounting arm coming out of the wall (negative X is "wall side") */}
+      <mesh position={[-0.16, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.025, 0.025, 0.12, 12]} />
+        <meshStandardMaterial color="#3f3f46" roughness={0.55} metalness={0.5} />
       </mesh>
-      {/* Lens iris */}
-      <mesh position={[0, 0, 0.27]}>
-        <circleGeometry args={[0.05, 24]} />
+      {/* Wall plate */}
+      <RoundedBox
+        args={[0.05, 0.16, 0.16]}
+        radius={0.014}
+        smoothness={4}
+        position={[-0.245, 0, 0]}
+        castShadow
+      >
+        <meshStandardMaterial color="#27272a" roughness={0.55} />
+        <Outlines thickness={0.012} color="#52525b" opacity={0.6} transparent />
+      </RoundedBox>
+
+      {isPTZ ? (
+        <>
+          {/* PTZ yoke (the U-shaped support) */}
+          <mesh position={[0, 0.13, 0]} castShadow>
+            <cylinderGeometry args={[0.05, 0.05, 0.05, 16]} />
+            <meshStandardMaterial color="#3f3f46" roughness={0.5} metalness={0.4} />
+          </mesh>
+          {/* Spherical head */}
+          <mesh castShadow>
+            <sphereGeometry args={[0.16, 32, 24]} />
+            <meshStandardMaterial color="#18181b" roughness={0.5} metalness={0.4} />
+          </mesh>
+        </>
+      ) : (
+        <>
+          {/* Bullet housing */}
+          <RoundedBox
+            args={[0.36, 0.2, 0.22]}
+            radius={0.035}
+            smoothness={5}
+            castShadow
+          >
+            <meshStandardMaterial color="#1f2024" roughness={0.5} metalness={0.3} />
+            <Outlines
+              thickness={0.014}
+              color="#52525b"
+              opacity={0.7}
+              transparent
+            />
+          </RoundedBox>
+          {/* Sunshade / hood on top */}
+          <RoundedBox
+            args={[0.4, 0.04, 0.26]}
+            radius={0.015}
+            smoothness={4}
+            position={[0.02, 0.13, 0]}
+            castShadow
+          >
+            <meshStandardMaterial color="#0d0e10" roughness={0.6} />
+          </RoundedBox>
+          {/* Brand strip */}
+          <mesh position={[0, 0.05, 0.111]}>
+            <planeGeometry args={[0.18, 0.025]} />
+            <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.5} />
+          </mesh>
+          {/* Status LED beside the lens */}
+          <mesh position={[0.18, -0.06, 0.05]}>
+            <sphereGeometry args={[0.012, 10, 10]} />
+            <meshStandardMaterial
+              color={accent}
+              emissive={accent}
+              emissiveIntensity={emissiveIntensity}
+            />
+          </mesh>
+        </>
+      )}
+
+      {/* Lens barrel — protrudes from the front of either variant */}
+      <mesh
+        rotation={[0, 0, Math.PI / 2]}
+        position={[isPTZ ? 0.18 : 0.22, 0, 0]}
+        castShadow
+      >
+        <cylinderGeometry args={[0.08, 0.09, 0.12, 24]} />
+        <meshStandardMaterial color="#09090b" roughness={0.4} metalness={0.5} />
+      </mesh>
+      {/* Objective ring */}
+      <mesh
+        rotation={[0, 0, Math.PI / 2]}
+        position={[isPTZ ? 0.24 : 0.28, 0, 0]}
+      >
+        <torusGeometry args={[0.082, 0.012, 12, 24]} />
+        <meshStandardMaterial color="#3f3f46" roughness={0.3} metalness={0.7} />
+      </mesh>
+      {/* Glass iris */}
+      <mesh
+        rotation={[0, 0, Math.PI / 2]}
+        position={[isPTZ ? 0.245 : 0.286, 0, 0]}
+      >
+        <circleGeometry args={[0.07, 32]} />
         <meshStandardMaterial
           color={accent}
           emissive={accent}
-          emissiveIntensity={emissiveIntensity}
+          emissiveIntensity={emissiveIntensity * 0.9}
+          roughness={0.2}
+          metalness={0.4}
         />
       </mesh>
-      {/* Top mount tab */}
-      <RoundedBox
-        args={[0.06, 0.05, 0.08]}
-        radius={0.012}
-        smoothness={3}
-        position={[0, 0.105, -0.04]}
-      >
-        <meshStandardMaterial color="#27272a" roughness={0.7} />
-      </RoundedBox>
     </group>
   );
 }

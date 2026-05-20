@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useActiveFloor } from "@/lib/store";
 import { useSimStore } from "@/lib/sim-store";
-import { computeDetection, positionOnPath } from "@/lib/detection";
+import { collideAgainstWalls, computeDetection, positionOnPath } from "@/lib/detection";
 import type { CameraDevice, SensorDevice, Vec2 } from "@/types/design";
 
 interface SimControllerProps {
@@ -40,11 +40,19 @@ export function SimController({ onActorMove }: SimControllerProps) {
     const path = floor.simPath ?? [];
     if (path.length < 2) return;
 
-    const { position: actorPos, doneAt } = positionOnPath(
+    const { position: rawActorPos, doneAt } = positionOnPath(
       path,
       t,
       1.4,
       floor.scale
+    );
+    // Apply the same collision push-out the visual actor uses so detection
+    // events line up with what's actually rendered.
+    const ACTOR_RADIUS_PX = 0.28 * floor.scale;
+    const actorPos = collideAgainstWalls(
+      rawActorPos,
+      floor.walls,
+      ACTOR_RADIUS_PX
     );
 
     if (running && t > doneAt) {

@@ -97,3 +97,35 @@ export function shortestAngleDelta(from: number, to: number): number {
   const diff = (to - from + Math.PI) % (Math.PI * 2);
   return diff - Math.PI;
 }
+
+/**
+ * Distance from point (px, pz) to the line segment (ax,az)-(bx,bz) in 2D,
+ * along with the outward unit normal from the segment to the point. Used for
+ * pushing a circular collider out of a wall.
+ */
+export function pointToSegment(
+  px: number,
+  pz: number,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number
+): { dist: number; nx: number; nz: number } {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const len2 = dx * dx + dz * dz;
+  let t = 0;
+  if (len2 > 0) {
+    t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / len2));
+  }
+  const cx = ax + t * dx;
+  const cz = az + t * dz;
+  const ox = px - cx;
+  const oz = pz - cz;
+  const d = Math.hypot(ox, oz);
+  return {
+    dist: d,
+    nx: d > 0 ? ox / d : 1,
+    nz: d > 0 ? oz / d : 0,
+  };
+}

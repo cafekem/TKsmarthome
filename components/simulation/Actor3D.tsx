@@ -6,7 +6,7 @@ import { Outlines, RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
 import { useActiveFloor } from "@/lib/store";
 import { useSimStore } from "@/lib/sim-store";
-import { positionOnPath } from "@/lib/detection";
+import { collideAgainstWalls, positionOnPath } from "@/lib/detection";
 import {
   BOB_AMPLITUDE,
   LIMB_SWING,
@@ -77,8 +77,16 @@ export function Actor3D() {
     const running = useSimStore.getState().running;
 
     const { position } = positionOnPath(path, t, WALK_SPEED, floor.scale);
-    const worldX = position.x / floor.scale;
-    const worldZ = position.y / floor.scale;
+    // Apply wall collision in pixel space using the shared helper, then
+    // convert to world meters for rendering.
+    const ACTOR_RADIUS_PX = 0.28 * floor.scale;
+    const collided = collideAgainstWalls(
+      position,
+      floor.walls,
+      ACTOR_RADIUS_PX
+    );
+    const worldX = collided.x / floor.scale;
+    const worldZ = collided.y / floor.scale;
 
     const dx = worldX - lastPos.current.x;
     const dz = worldZ - lastPos.current.z;
