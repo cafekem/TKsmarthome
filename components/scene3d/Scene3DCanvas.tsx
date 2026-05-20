@@ -23,56 +23,67 @@ export function Scene3DCanvas({ width, height }: Scene3DCanvasProps) {
   const floor = useActiveFloor();
   const showCoverage = useDesignStore((s) => s.showCoverage);
 
-  const meters = useMemo(() => floor && pixelsToMeters(floor), [floor]);
+  const frame = useMemo(() => floor && computeFrame(floor), [floor]);
 
-  if (!floor || !meters) {
+  if (!floor || !frame) {
     return null;
   }
+
+  const { center, span, cameraPos } = frame;
+  const maxDim = Math.max(span.x, span.z, 6);
 
   return (
     <div className="absolute inset-0" style={{ width, height }}>
       <Canvas
         shadows
         camera={{
-          position: [
-            meters.width * 0.5 + Math.max(meters.width, 6) * 0.8,
-            Math.max(meters.width, meters.height, 6) * 0.7,
-            meters.height * 0.5 + Math.max(meters.height, 6) * 0.8,
-          ],
-          fov: 50,
+          position: cameraPos,
+          fov: 45,
+          near: 0.1,
+          far: maxDim * 12,
         }}
         onCreated={({ camera }) => {
-          camera.lookAt(meters.width / 2, 1, meters.height / 2);
+          camera.lookAt(center.x, 1, center.z);
         }}
         gl={{ antialias: true }}
       >
         <color attach="background" args={["#0c0c0d"]} />
-        <fog attach="fog" args={["#0c0c0d", meters.width * 1.2, meters.width * 3]} />
-
-        <ambientLight intensity={0.55} />
-        <directionalLight
-          castShadow
-          position={[meters.width * 0.8, meters.width * 1.2, meters.height * 0.4]}
-          intensity={1.4}
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
-          shadow-camera-left={-meters.width}
-          shadow-camera-right={meters.width}
-          shadow-camera-top={meters.height}
-          shadow-camera-bottom={-meters.height}
+        <fog
+          attach="fog"
+          args={["#0c0c0d", maxDim * 1.8, maxDim * 4]}
         />
 
-        <hemisphereLight args={["#bcd5ff", "#1a1a1a", 0.55]} />
+        <ambientLight intensity={0.6} />
+        <directionalLight
+          castShadow
+          position={[
+            center.x + maxDim * 0.7,
+            maxDim * 1.4,
+            center.z + maxDim * 0.4,
+          ]}
+          intensity={1.1}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
+          shadow-camera-left={-maxDim}
+          shadow-camera-right={maxDim}
+          shadow-camera-top={maxDim}
+          shadow-camera-bottom={-maxDim}
+          shadow-camera-near={1}
+          shadow-camera-far={maxDim * 4}
+          shadow-bias={-0.0005}
+        />
+
+        <hemisphereLight args={["#bcd5ff", "#1a1a1a", 0.5]} />
 
         <Grid
-          position={[meters.width / 2, 0.01, meters.height / 2]}
-          args={[Math.max(meters.width, meters.height) * 2, Math.max(meters.width, meters.height) * 2]}
+          position={[center.x, 0.01, center.z]}
+          args={[maxDim * 3, maxDim * 3]}
           cellColor="#1f2937"
           sectionColor="#374151"
           cellSize={1}
           sectionSize={5}
-          fadeDistance={Math.max(meters.width, meters.height) * 2}
-          fadeStrength={1}
+          fadeDistance={maxDim * 2.5}
+          fadeStrength={1.2}
           infiniteGrid
         />
 
@@ -80,9 +91,9 @@ export function Scene3DCanvas({ width, height }: Scene3DCanvasProps) {
         <mesh
           receiveShadow
           rotation={[-Math.PI / 2, 0, 0]}
-          position={[meters.width / 2, 0, meters.height / 2]}
+          position={[center.x, 0, center.z]}
         >
-          <planeGeometry args={[meters.width, meters.height]} />
+          <planeGeometry args={[span.x * 1.1, span.z * 1.1]} />
           <meshStandardMaterial color="#1a1a1d" roughness={0.85} metalness={0} />
         </mesh>
 
@@ -111,39 +122,58 @@ export function Scene3DCanvas({ width, height }: Scene3DCanvasProps) {
           enableDamping
           dampingFactor={0.08}
           minDistance={1}
-          maxDistance={meters.width * 4}
+          maxDistance={maxDim * 4}
           maxPolarAngle={Math.PI / 2.05}
-          target={[meters.width / 2, 1, meters.height / 2]}
+          target={[center.x, 1, center.z]}
         />
       </Canvas>
     </div>
   );
 }
 
-function pixelsToMeters(floor: Floor) {
-  if (!floor) return null;
-  // Use floor plan image bounds if available, else infer from device/wall bounds
-  // Default room size in meters when no image:
-  let widthPx = 800;
-  let heightPx = 600;
-
-  const xs = [
-    ...floor.devices.map((d) => d.position.x),
-    ...floor.walls.flatMap((w) => [w.start.x, w.end.x]),
-  ];
-  const ys = [
-    ...floor.devices.map((d) => d.position.y),
-    ...floor.walls.flatMap((w) => [w.start.y, w.end.y]),
-  ];
-  if (xs.length > 0) {
-    widthPx = Math.max(...xs) + 100;
-    heightPx = Math.max(...ys) + 100;
+/**
+ * Compute scene bounds in meters from the floor's data, and a sensible camera
+ * position framed on that center. Returns center (world point to look at),
+ * span (extents in X and Z), and cameraPos (initial camera position).
+ */
+function computeFrame(floor: Floor) {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const d of floor.devices) {
+    xs.push(d.position.x);
+    ys.push(d.position.y);
   }
-
-  return {
-    width: widthPx / floor.scale,
-    height: heightPx / floor.scale,
+  for (const w of floor.walls) {
+    xs.push(w.start.x, w.end.x);
+    ys.push(w.start.y, w.end.y);
+  }
+  // Default to a small room if there's nothing to bound on yet
+  let minX = 0;
+  let maxX = 400;
+  let minY = 0;
+  let maxY = 300;
+  if (xs.length > 0) {
+    minX = Math.min(...xs);
+    maxX = Math.max(...xs);
+    minY = Math.min(...ys);
+    maxY = Math.max(...ys);
+  }
+  const center = {
+    x: ((minX + maxX) / 2) / floor.scale,
+    z: ((minY + maxY) / 2) / floor.scale,
   };
+  const span = {
+    x: Math.max((maxX - minX) / floor.scale, 6),
+    z: Math.max((maxY - minY) / floor.scale, 6),
+  };
+  const maxDim = Math.max(span.x, span.z);
+  // Stand back along the SE diagonal at ~30° elevation
+  const cameraPos: [number, number, number] = [
+    center.x + maxDim * 0.85,
+    Math.max(maxDim * 0.65, 4),
+    center.z + maxDim * 0.85,
+  ];
+  return { center, span, cameraPos };
 }
 
 function Wall3D({
