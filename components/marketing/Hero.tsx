@@ -2,117 +2,145 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Boxes } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, Eye } from "lucide-react";
+
+/**
+ * Mountain-landscape hero. Layout and feel inspired by Cluely's landing:
+ * massive centered serif headline (Instrument Serif), short subtitle, single
+ * frosted-glass CTA, all overlaid on a sky-and-mountains background with
+ * the sun on the right. Top nav is overlaid white-on-image inside the hero
+ * itself rather than sitting above it.
+ */
 
 export function Hero() {
   return (
-    <section className="relative isolate overflow-hidden">
-      <div className="absolute inset-0 bg-grid pointer-events-none" />
-      <div className="absolute inset-0 bg-noise pointer-events-none opacity-60" />
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(60% 50% at 50% 0%, oklch(0.78 0.135 158 / 18%), transparent 70%)",
-        }}
-      />
-      <div
-        className="absolute -bottom-32 left-1/2 -translate-x-1/2 pointer-events-none size-[820px] rounded-full opacity-25 blur-3xl"
-        style={{
-          background:
-            "radial-gradient(circle at center, oklch(0.78 0.135 158 / 60%), transparent 65%)",
-        }}
-      />
+    <section className="relative isolate min-h-[100vh] overflow-hidden">
+      {/* Background image — SVG mountain scene */}
+      <div className="absolute inset-0 -z-10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/marketing/hero-mountains.png"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 size-full object-cover"
+        />
+        {/* Very soft top-vignette so the headline reads against bright sky */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(0, 70, 140, 0.18) 0%, rgba(0,0,0,0) 35%)",
+          }}
+        />
+        {/* Bottom fade into the dark section that follows */}
+        <div
+          className="absolute inset-x-0 bottom-0 h-32"
+          style={{
+            background:
+              "linear-gradient(180deg, transparent 0%, var(--background) 100%)",
+          }}
+        />
+      </div>
 
-      <div className="relative mx-auto max-w-5xl px-6 pt-32 pb-28 sm:pt-44 sm:pb-36">
+      {/* Overlay nav — sits on top of the mountain image */}
+      <header className="absolute inset-x-0 top-0 z-20">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2.5 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.25)]"
+          >
+            <div className="flex size-7 items-center justify-center rounded-md bg-white/15 backdrop-blur-md ring-1 ring-white/25">
+              <Eye className="size-3.5" />
+            </div>
+            <span className="text-[1.05rem] font-medium tracking-[-0.01em]">
+              Deeper Vision
+            </span>
+          </Link>
+          <nav className="hidden items-center gap-8 text-[0.92rem] text-white/85 drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)] sm:flex">
+            <Link
+              href="#features"
+              className="transition-colors hover:text-white"
+            >
+              Features
+            </Link>
+            <Link
+              href="/design/new"
+              className="transition-colors hover:text-white"
+            >
+              Editor
+            </Link>
+            <Link
+              href="#pricing"
+              className="transition-colors hover:text-white"
+            >
+              Pricing
+            </Link>
+          </nav>
+        </div>
+      </header>
+
+      {/* Content */}
+      <div className="relative z-10 flex min-h-[100vh] items-center justify-center px-6 pt-20">
         <motion.div
-          initial={{ opacity: 0, y: 14 }}
+          initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: [0.2, 0.65, 0.3, 1] }}
-          className="flex flex-col items-start gap-9"
+          transition={{ duration: 0.85, ease: [0.2, 0.65, 0.3, 1] }}
+          className="max-w-4xl text-center"
         >
-          <div className="inline-flex items-center gap-2.5 rounded-full border border-border bg-card/60 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
-            <span className="relative flex size-2">
-              <span className="absolute inset-0 rounded-full bg-primary animate-pulse-ring" />
-              <span className="relative size-2 rounded-full bg-primary" />
-            </span>
-            <span className="tracking-[0.02em]">
-              Now in early preview&nbsp;·&nbsp;v0.1
-            </span>
-          </div>
-
-          <h1 className="text-[2.85rem] sm:text-[4.4rem] leading-[1.02] font-medium tracking-[-0.02em] text-foreground/95">
+          <h1
+            className="font-serif text-white text-[3.2rem] leading-[1.04] tracking-[-0.015em] drop-shadow-[0_4px_24px_rgba(0,30,80,0.18)] sm:text-[5rem] md:text-[5.75rem]"
+            style={{ fontStyle: "normal" }}
+          >
             Design security systems
             <br />
-            the way you{" "}
-            <span className="font-serif-italic text-primary text-glow-primary">
-              actually experience
-            </span>{" "}
-            them.
+            the way you actually
+            <br />
+            experience them.
           </h1>
 
-          <p className="max-w-2xl text-base sm:text-lg text-muted-foreground leading-[1.6] tracking-[0.005em]">
-            Deeper Vision is a modern site-survey platform. Drop a floor plan,
-            drag in cameras and sensors, then flip to a 3D walkthrough — walk
-            the building like a game, then simulate a threat to see exactly
-            where your coverage holds and where it breaks.
+          <p className="mx-auto mt-8 max-w-xl text-[0.98rem] leading-[1.55] text-white/85 drop-shadow-[0_1px_3px_rgba(0,30,80,0.12)] sm:text-[1.05rem]">
+            Deeper Vision is the first site-survey platform where every
+            camera, every wall, and every blind spot is a real 3D object you
+            can walk through, drag around, and price for your customer before
+            they finish their coffee.
           </p>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              size="lg"
-              className="h-11 px-5 text-[0.95rem] font-medium btn-lift shadow-[0_8px_24px_-12px_oklch(0.78_0.135_158/55%)]"
-              nativeButton={false}
-              render={<Link href="/design/new" />}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.6,
+              ease: [0.2, 0.65, 0.3, 1],
+              delay: 0.25,
+            }}
+            className="mt-10 flex items-center justify-center gap-3"
+          >
+            <Link
+              href="/design/new"
+              className="group relative inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/30 bg-white/15 px-6 py-3 text-[0.95rem] font-medium text-white shadow-[0_8px_30px_-12px_rgba(0,40,120,0.4),inset_0_1px_0_rgba(255,255,255,0.35)] backdrop-blur-md transition-all hover:bg-white/25 hover:shadow-[0_12px_36px_-12px_rgba(0,40,120,0.55),inset_0_1px_0_rgba(255,255,255,0.45)]"
             >
-              Open the editor
-              <ArrowRight className="ml-0.5 size-4" />
-            </Button>
-            <Button
-              size="lg"
-              variant="ghost"
-              className="h-11 px-5 text-[0.95rem] font-medium btn-lift"
-              nativeButton={false}
-              render={<Link href="#features" />}
+              <span>Open the editor</span>
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            <Link
+              href="#features"
+              className="rounded-full px-5 py-3 text-[0.95rem] font-medium text-white/85 transition-colors hover:text-white"
             >
-              <Boxes className="mr-0.5 size-4" />
-              See what it does differently
-            </Button>
-          </div>
+              See what it does
+            </Link>
+          </motion.div>
 
-          <div className="grid grid-cols-3 gap-x-10 gap-y-2 pt-6">
-            <Stat label="One toggle. Same design." value="2D ↔ 3D" />
-            <Stat label="First-person walkthrough." value="Walk it" mono />
-            <Stat label="Watch coverage in motion." value="Simulate" />
+          <div className="mt-16 inline-flex items-center gap-3 rounded-full bg-white/12 px-3 py-1 text-[0.72rem] text-white/85 backdrop-blur-sm ring-1 ring-white/25">
+            <span className="relative flex size-1.5">
+              <span className="absolute inset-0 animate-ping rounded-full bg-white/60" />
+              <span className="relative size-1.5 rounded-full bg-white" />
+            </span>
+            <span className="tracking-[0.04em]">
+              Now in early preview — v0.1
+            </span>
           </div>
         </motion.div>
       </div>
     </section>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div>
-      <div
-        className={
-          mono
-            ? "font-mono text-[1.45rem] text-foreground/95 tracking-tight"
-            : "text-[1.6rem] text-foreground/95 tracking-tight font-medium"
-        }
-      >
-        {value}
-      </div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-    </div>
   );
 }
