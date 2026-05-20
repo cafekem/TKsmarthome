@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { useDesignStore } from "@/lib/store";
 import { TopBar } from "./TopBar";
 import { LibraryPanel } from "./LibraryPanel";
@@ -43,20 +42,9 @@ export function EditorShell({ designId }: { designId: string }) {
           <LibraryPanel />
         </div>
         <div className="relative flex-1 min-w-0">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={mode}
-              initial={{ opacity: 0, scale: 0.99 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.01 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              className="absolute inset-0"
-            >
-              {mode === "2d" && <Canvas2D />}
-              {mode === "3d" && <Scene3D />}
-              {mode === "sim" && <SimView />}
-            </motion.div>
-          </AnimatePresence>
+          {mode === "2d" && <Canvas2D />}
+          {mode === "3d" && <Scene3D />}
+          {mode === "sim" && <SimView />}
         </div>
         <div className="w-80 shrink-0">
           <PropertiesPanel />
