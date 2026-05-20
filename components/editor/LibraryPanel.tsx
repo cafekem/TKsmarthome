@@ -1,27 +1,50 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Camera,
-  DoorOpen,
-  Radar,
-  Search,
-  Wifi,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Search } from "lucide-react";
 import type { DeviceType } from "@/types/design";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { DevicePreview3D, type PreviewKind } from "./DevicePreview3D";
+
+type CameraSubtype = "dome" | "ptz" | "fixed" | "fisheye";
+type ReaderSubtype = "card" | "biometric" | "keypad";
+type SensorSubtype = "motion" | "glass-break" | "door-contact" | "smoke";
+type NetworkSubtype = "switch" | "access-point" | "nvr";
 
 interface DeviceCard {
   type: DeviceType;
-  subtype: string;
+  subtype: CameraSubtype | ReaderSubtype | SensorSubtype | NetworkSubtype;
   label: string;
-  icon: LucideIcon;
   description: string;
-  accent: string;
+}
+
+function previewKindFor(card: DeviceCard): PreviewKind {
+  // Narrow the union — at runtime the type field tells us the subtype shape
+  switch (card.type) {
+    case "camera":
+      return {
+        type: "camera",
+        subtype: card.subtype as CameraSubtype,
+      };
+    case "reader":
+      return {
+        type: "reader",
+        subtype: card.subtype as ReaderSubtype,
+      };
+    case "sensor":
+      return {
+        type: "sensor",
+        subtype: card.subtype as SensorSubtype,
+      };
+    case "network":
+      return {
+        type: "network",
+        subtype: card.subtype as NetworkSubtype,
+      };
+  }
 }
 
 const catalog: { category: string; items: DeviceCard[] }[] = [
@@ -32,25 +55,19 @@ const catalog: { category: string; items: DeviceCard[] }[] = [
         type: "camera",
         subtype: "dome",
         label: "Dome camera",
-        icon: Camera,
         description: "Indoor, ceiling-mount, 90° FOV",
-        accent: "text-emerald-400",
       },
       {
         type: "camera",
         subtype: "ptz",
         label: "PTZ camera",
-        icon: Camera,
         description: "Pan / tilt / zoom, 60° FOV",
-        accent: "text-emerald-400",
       },
       {
         type: "camera",
         subtype: "fixed",
         label: "Fixed camera",
-        icon: Camera,
         description: "Wall-mount, 80° FOV",
-        accent: "text-emerald-400",
       },
     ],
   },
@@ -61,17 +78,13 @@ const catalog: { category: string; items: DeviceCard[] }[] = [
         type: "reader",
         subtype: "card",
         label: "Card reader",
-        icon: DoorOpen,
         description: "Door-side mount, 1.2m",
-        accent: "text-sky-400",
       },
       {
         type: "reader",
         subtype: "biometric",
         label: "Biometric reader",
-        icon: DoorOpen,
         description: "Fingerprint or face",
-        accent: "text-sky-400",
       },
     ],
   },
@@ -82,25 +95,19 @@ const catalog: { category: string; items: DeviceCard[] }[] = [
         type: "sensor",
         subtype: "motion",
         label: "Motion sensor",
-        icon: Radar,
         description: "PIR, 8m detection",
-        accent: "text-amber-400",
       },
       {
         type: "sensor",
         subtype: "glass-break",
         label: "Glass-break",
-        icon: Radar,
         description: "Acoustic, 6m range",
-        accent: "text-amber-400",
       },
       {
         type: "sensor",
         subtype: "door-contact",
         label: "Door contact",
-        icon: Radar,
         description: "Magnetic switch",
-        accent: "text-amber-400",
       },
     ],
   },
@@ -111,25 +118,19 @@ const catalog: { category: string; items: DeviceCard[] }[] = [
         type: "network",
         subtype: "access-point",
         label: "WiFi AP",
-        icon: Wifi,
         description: "WiFi 6, 15m coverage",
-        accent: "text-violet-400",
       },
       {
         type: "network",
         subtype: "switch",
         label: "Network switch",
-        icon: Wifi,
         description: "PoE, 24 ports",
-        accent: "text-violet-400",
       },
       {
         type: "network",
         subtype: "nvr",
         label: "NVR",
-        icon: Wifi,
         description: "Network video recorder",
-        accent: "text-violet-400",
       },
     ],
   },
@@ -206,8 +207,8 @@ export function LibraryPanel() {
                       "cursor-grab active:cursor-grabbing"
                     )}
                   >
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-                      <card.icon className={cn("size-4.5", card.accent)} />
+                    <div className="relative size-14 shrink-0 overflow-hidden rounded-md border border-border bg-gradient-to-br from-background/80 to-accent/20 shadow-[inset_0_1px_0_color-mix(in_oklch,white_4%,transparent)]">
+                      <DevicePreview3D kind={previewKindFor(card)} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium truncate">
