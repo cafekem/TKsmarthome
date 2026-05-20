@@ -207,7 +207,7 @@ export function LibraryPanel() {
                       "cursor-grab active:cursor-grabbing"
                     )}
                   >
-                    <div className="relative size-14 shrink-0 overflow-hidden rounded-md border border-border bg-gradient-to-br from-background/80 to-accent/20 shadow-[inset_0_1px_0_color-mix(in_oklch,white_4%,transparent)]">
+                    <div className="relative size-14 shrink-0 overflow-hidden rounded-md border border-border shadow-[inset_0_1px_0_color-mix(in_oklch,white_8%,transparent)]">
                       <DevicePreview3D kind={previewKindFor(card)} />
                     </div>
                     <div className="min-w-0 flex-1">
