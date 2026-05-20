@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { Canvas } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Grid, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
@@ -126,9 +126,46 @@ export function Scene3DCanvas({ width, height }: Scene3DCanvasProps) {
           maxPolarAngle={Math.PI / 2.05}
           target={[center.x, 1, center.z]}
         />
+        <FramingInit
+          cameraPos={cameraPos}
+          target={[center.x, 1, center.z]}
+        />
       </Canvas>
     </div>
   );
+}
+
+/**
+ * Forces the camera to its initial framing on mount, AFTER OrbitControls is
+ * registered. Passing `camera` + `target` as props alone is not enough —
+ * OrbitControls' damping can lock the rotation in before the camera has had
+ * a chance to look at the scene center, producing a black first frame.
+ */
+function FramingInit({
+  cameraPos,
+  target,
+}: {
+  cameraPos: [number, number, number];
+  target: [number, number, number];
+}) {
+  const { camera, controls } = useThree();
+  const didInit = useRef(false);
+  useEffect(() => {
+    if (didInit.current) return;
+    didInit.current = true;
+    camera.position.set(cameraPos[0], cameraPos[1], cameraPos[2]);
+    camera.lookAt(target[0], target[1], target[2]);
+    camera.updateProjectionMatrix();
+    const c = controls as unknown as {
+      target?: THREE.Vector3;
+      update?: () => void;
+    } | null;
+    if (c && c.target) {
+      c.target.set(target[0], target[1], target[2]);
+      c.update?.();
+    }
+  }, [camera, controls, cameraPos, target]);
+  return null;
 }
 
 /**
