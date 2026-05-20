@@ -16,7 +16,9 @@ import type { Device, DeviceType, Floor, Wall } from "@/types/design";
 import { WalkController } from "./WalkController";
 import { SimController } from "@/components/simulation/SimController";
 import { Actor3D } from "@/components/simulation/Actor3D";
-import { SimPath3D } from "@/components/simulation/SimPath3D";
+import { SubjectTrail3D } from "@/components/simulation/SubjectTrail3D";
+import { CameraFOV3D } from "@/components/simulation/CameraFOV3D";
+import { useSimStore as useSimStoreLib } from "@/lib/sim-store";
 import { DeviceMesh } from "./DeviceMesh";
 
 interface Scene3DCanvasProps {
@@ -56,11 +58,15 @@ export function Scene3DCanvas({
     setMountedTheme(resolvedTheme === "light" ? "light" : "dark");
   }, [resolvedTheme]);
   const isLight = mountedTheme === "light";
-  const bgColor = isLight ? "#eef0f3" : "#0c0c0d";
-  const floorColor = isLight ? "#dcdee2" : "#1a1a1d";
-  const wallColor = isLight ? "#cbd0d6" : "#27272a";
-  const gridCell = isLight ? "#cbd5e1" : "#1f2937";
-  const gridSection = isLight ? "#94a3b8" : "#374151";
+  // Warmer "designed building" palette instead of warehouse grey. Light mode
+  // reads as natural wood + cream walls; dark mode reads as a tinted modern
+  // office at dusk, still legible but never neutral.
+  const bgColor = isLight ? "#f3eee5" : "#0e0d0c";
+  const floorColor = isLight ? "#d4bf95" : "#3a322a"; // warm tan / walnut
+  const wallColor = isLight ? "#f0e7d8" : "#3a3530"; // eggshell / warm dark
+  const baseboardColor = isLight ? "#5a4530" : "#1a1612";
+  const gridCell = isLight ? "#b8a98a" : "#4a3f33";
+  const gridSection = isLight ? "#8a7a5b" : "#6b5b48";
 
   const frame = useMemo(() => floor && computeFrame(floor), [floor]);
 
@@ -231,6 +237,7 @@ export function Scene3DCanvas({
             scale={floor.scale}
             ceilingHeight={floor.ceilingHeight}
             color={wallColor}
+            baseboardColor={baseboardColor}
           />
         ))}
 
@@ -251,11 +258,11 @@ export function Scene3DCanvas({
         ))}
 
         {showSim && floor.simPath && floor.simPath.length >= 2 && (
-          <>
-            <SimPath3D path={floor.simPath} scale={floor.scale} />
-            <Actor3D />
-            <SimController />
-          </>
+          <SimulationOverlay
+            cameras={floor.devices.filter((d) => d.type === "camera") as never}
+            scale={floor.scale}
+            path={floor.simPath}
+          />
         )}
 
         {threeDMode === "orbit" ? (
@@ -285,6 +292,30 @@ export function Scene3DCanvas({
         )}
       </Canvas>
     </div>
+  );
+}
+
+function SimulationOverlay({
+  cameras,
+  scale,
+  path,
+}: {
+  cameras: import("@/types/design").CameraDevice[];
+  scale: number;
+  path: import("@/types/design").Vec2[];
+}) {
+  const detectingIds = useSimStoreLib((s) => s.detectingCameras);
+  return (
+    <>
+      <CameraFOV3D
+        cameras={cameras}
+        scale={scale}
+        detectingIds={detectingIds}
+      />
+      <SubjectTrail3D path={path} scale={scale} />
+      <Actor3D />
+      <SimController />
+    </>
   );
 }
 
@@ -357,12 +388,14 @@ function Wall3D({
   wall,
   scale,
   ceilingHeight,
-  color = "#27272a",
+  color = "#3a3530",
+  baseboardColor = "#1a1612",
 }: {
   wall: Wall;
   scale: number;
   ceilingHeight: number;
   color?: string;
+  baseboardColor?: string;
 }) {
   const start = { x: wall.start.x / scale, z: wall.start.y / scale };
   const end = { x: wall.end.x / scale, z: wall.end.y / scale };
@@ -373,17 +406,30 @@ function Wall3D({
   const cx = (start.x + end.x) / 2;
   const cz = (start.z + end.z) / 2;
   const wallThickness = 0.15;
+  const baseboardThickness = 0.18;
+  const baseboardHeight = 0.1;
 
   return (
-    <mesh
-      castShadow
-      receiveShadow
-      position={[cx, ceilingHeight / 2, cz]}
-      rotation={[0, -angle, 0]}
-    >
-      <boxGeometry args={[length, ceilingHeight, wallThickness]} />
-      <meshStandardMaterial color={color} roughness={0.7} />
-    </mesh>
+    <group position={[cx, 0, cz]} rotation={[0, -angle, 0]}>
+      {/* Main wall */}
+      <mesh
+        castShadow
+        receiveShadow
+        position={[0, ceilingHeight / 2, 0]}
+      >
+        <boxGeometry args={[length, ceilingHeight, wallThickness]} />
+        <meshStandardMaterial color={color} roughness={0.78} />
+      </mesh>
+      {/* Baseboard trim — slightly proud of the wall so it reads as a
+         distinct band of dark wood/paint at the floor */}
+      <mesh
+        receiveShadow
+        position={[0, baseboardHeight / 2, 0]}
+      >
+        <boxGeometry args={[length, baseboardHeight, baseboardThickness]} />
+        <meshStandardMaterial color={baseboardColor} roughness={0.55} metalness={0.05} />
+      </mesh>
+    </group>
   );
 }
 

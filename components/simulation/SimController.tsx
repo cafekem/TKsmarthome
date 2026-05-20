@@ -20,6 +20,8 @@ export function SimController({ onActorMove }: SimControllerProps) {
   const setDetection = useSimStore((s) => s.setDetection);
   const pushEvent = useSimStore((s) => s.pushEvent);
   const reset = useSimStore((s) => s.reset);
+  const recordFrameCoverage = useSimStore((s) => s.recordFrameCoverage);
+  const markFinished = useSimStore((s) => s.markFinished);
 
   const lastDetected = useRef<Set<string>>(new Set());
   const lastTriggered = useRef<Set<string>>(new Set());
@@ -33,8 +35,9 @@ export function SimController({ onActorMove }: SimControllerProps) {
 
   useFrame((_, delta) => {
     if (!floor) return;
+    const dt = Math.min(delta, 0.1);
     if (running) {
-      tick(Math.min(delta, 0.1));
+      tick(dt);
     }
 
     const path = floor.simPath ?? [];
@@ -56,7 +59,7 @@ export function SimController({ onActorMove }: SimControllerProps) {
     );
 
     if (running && t > doneAt) {
-      useSimStore.setState({ running: false });
+      markFinished();
     }
 
     onActorMove?.(actorPos);
@@ -112,6 +115,10 @@ export function SimController({ onActorMove }: SimControllerProps) {
     lastTriggered.current = result.triggeredSensors;
 
     setDetection(result.detectingCameras, result.triggeredSensors);
+    // Accumulate coverage / blind time using the same dt we ticked with
+    if (running) {
+      recordFrameCoverage(dt);
+    }
   });
 
   return null;
