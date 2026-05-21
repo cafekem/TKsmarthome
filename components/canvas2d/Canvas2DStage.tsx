@@ -7,6 +7,7 @@ import {
   Image as KImage,
   Layer,
   Line,
+  Rect,
   Stage,
   Text,
 } from "react-konva";
@@ -325,6 +326,33 @@ export function Canvas2DStage({
 
   const scalePxPerMeter = floor?.scale ?? 50;
 
+  // Bounding box of the wall network, in floor-plan pixel coords.
+  // Used to draw a warm cream "interior floor" rectangle so the floor
+  // visually reads as the inside of the building (matching the 3D scene's
+  // cream tone) while the surrounding grid stays a cool neutral.
+  // Padded slightly so the fill extends to the wall centerlines.
+  const interiorBox = useMemo(() => {
+    if (!floor || floor.walls.length === 0) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const w of floor.walls) {
+      minX = Math.min(minX, w.start.x, w.end.x);
+      minY = Math.min(minY, w.start.y, w.end.y);
+      maxX = Math.max(maxX, w.start.x, w.end.x);
+      maxY = Math.max(maxY, w.start.y, w.end.y);
+    }
+    if (!Number.isFinite(minX)) return null;
+    const pad = 2; // bleed slightly under the wall stroke width
+    return {
+      x: minX - pad,
+      y: minY - pad,
+      width: maxX - minX + pad * 2,
+      height: maxY - minY + pad * 2,
+    };
+  }, [floor]);
+
   const cursorStyle = useMemo(() => {
     if (tool === "wall" || tool === "calibrate" || tool === "door")
       return "crosshair";
@@ -344,22 +372,14 @@ export function Canvas2DStage({
         e.dataTransfer.dropEffect = "copy";
       }}
     >
-      {/* Atmospheric wash — warm cream radial highlight echoing the 3D
-          scene's light-mode floor */}
+      {/* Subtle atmospheric wash so the canvas doesn't read as flat
+          graph paper. (Interior cream fill is drawn separately, inside
+          the Konva Stage, scoped to the wall bounding box.) */}
       <div
         className="pointer-events-none absolute inset-0 z-0"
         style={{
           background:
-            "radial-gradient(ellipse 80% 60% at 50% 35%, rgba(245, 230, 200, 0.35) 0%, transparent 65%)",
-        }}
-        aria-hidden="true"
-      />
-      {/* Edge fade — slight warm darkening at the outer edges adds depth */}
-      <div
-        className="pointer-events-none absolute inset-0 z-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 95% 95% at 50% 50%, transparent 55%, rgba(80, 60, 35, 0.08) 100%)",
+            "radial-gradient(ellipse 95% 95% at 50% 50%, transparent 55%, rgba(0,0,0,0.04) 100%)",
         }}
         aria-hidden="true"
       />
@@ -404,6 +424,22 @@ export function Canvas2DStage({
               image={planImage}
               x={0}
               y={0}
+              opacity={0.85}
+              listening={false}
+            />
+          )}
+
+          {/* Interior floor fill — warm cream rectangle inside the wall
+              bounding box so the floor reads as a real interior surface
+              (matching the 3D scene's cream floor) while the surrounding
+              grid stays a cool neutral. Drawn beneath walls. */}
+          {interiorBox && (
+            <Rect
+              x={interiorBox.x}
+              y={interiorBox.y}
+              width={interiorBox.width}
+              height={interiorBox.height}
+              fill="#f3eee5"
               opacity={0.85}
               listening={false}
             />

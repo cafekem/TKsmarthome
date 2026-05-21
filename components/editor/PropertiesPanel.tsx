@@ -360,27 +360,8 @@ function DeviceForm({
         </div>
       )}
 
-      {device.type === "network" && device.networkType === "access-point" && (
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">
-            Coverage radius (m)
-          </Label>
-          <div className="flex items-center gap-3">
-            <Slider
-              min={1}
-              max={50}
-              step={0.5}
-              value={[device.coverageMeters ?? 15]}
-              onValueChange={(v) =>
-                onChange({ coverageMeters: pickValue(v) } as Partial<Device>)
-              }
-              className="flex-1"
-            />
-            <div className="font-mono text-sm w-12 text-right">
-              {(device.coverageMeters ?? 15).toFixed(1)}
-            </div>
-          </div>
-        </div>
+      {device.type === "network" && (
+        <NetworkDeviceFields device={device} onChange={onChange} />
       )}
 
       <Separator />
@@ -827,6 +808,219 @@ function DoorForm({
         <Trash2 className="size-4" />
         Remove door
       </Button>
+    </div>
+  );
+}
+
+/* ── Network device fields ─────────────────────────────────────────────
+   Subtype-aware: access-points get coverage radius + Wi-Fi standard,
+   switches get port count + PoE budget, NVRs get channels + storage +
+   retention. Replaces the previous bare "coverage only" block. */
+function NetworkDeviceFields({
+  device,
+  onChange,
+}: {
+  device: Extract<Device, { type: "network" }>;
+  onChange: (partial: Partial<Device>) => void;
+}) {
+  const subtype = device.networkType;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="text-[0.78rem] font-medium text-foreground/85">
+          {subtype === "nvr"
+            ? "Recorder specs"
+            : subtype === "switch"
+              ? "Switch specs"
+              : "Wireless coverage"}
+        </div>
+        <span className="rounded-md bg-foreground/[0.06] px-1.5 py-0.5 text-[0.62rem] uppercase tracking-wider text-muted-foreground">
+          {subtype === "access-point" ? "AP" : subtype === "nvr" ? "NVR" : "Switch"}
+        </span>
+      </div>
+
+      {subtype === "access-point" && (
+        <>
+          <NumberSlider
+            label="Coverage radius (m)"
+            min={1}
+            max={50}
+            step={0.5}
+            value={device.coverageMeters ?? 15}
+            display={(v) => v.toFixed(1)}
+            onChange={(v) =>
+              onChange({ coverageMeters: v } as Partial<Device>)
+            }
+          />
+          <SelectField
+            label="Wi-Fi standard"
+            value={device.wifiStandard ?? "Wi-Fi 6"}
+            options={["Wi-Fi 5", "Wi-Fi 6", "Wi-Fi 6E", "Wi-Fi 7"]}
+            onChange={(v) =>
+              onChange({ wifiStandard: v } as Partial<Device>)
+            }
+          />
+        </>
+      )}
+
+      {subtype === "switch" && (
+        <>
+          <NumberSlider
+            label="Port count"
+            min={4}
+            max={48}
+            step={4}
+            value={device.portCount ?? 24}
+            display={(v) => `${Math.round(v)}`}
+            onChange={(v) =>
+              onChange({ portCount: Math.round(v) } as Partial<Device>)
+            }
+          />
+          <NumberSlider
+            label="PoE budget (W)"
+            min={0}
+            max={1000}
+            step={30}
+            value={device.poeBudgetW ?? 370}
+            display={(v) => `${Math.round(v)} W`}
+            onChange={(v) =>
+              onChange({ poeBudgetW: Math.round(v) } as Partial<Device>)
+            }
+          />
+          <PoeSummary
+            portCount={device.portCount ?? 24}
+            poeBudgetW={device.poeBudgetW ?? 370}
+          />
+        </>
+      )}
+
+      {subtype === "nvr" && (
+        <>
+          <NumberSlider
+            label="Channels"
+            min={4}
+            max={128}
+            step={4}
+            value={device.portCount ?? 32}
+            display={(v) => `${Math.round(v)} ch`}
+            onChange={(v) =>
+              onChange({ portCount: Math.round(v) } as Partial<Device>)
+            }
+          />
+          <NumberSlider
+            label="Storage (TB)"
+            min={1}
+            max={120}
+            step={1}
+            value={device.storageTb ?? 16}
+            display={(v) => `${Math.round(v)} TB`}
+            onChange={(v) =>
+              onChange({ storageTb: Math.round(v) } as Partial<Device>)
+            }
+          />
+          <NumberSlider
+            label="Retention (days)"
+            min={7}
+            max={180}
+            step={1}
+            value={device.retentionDays ?? 30}
+            display={(v) => `${Math.round(v)} d`}
+            onChange={(v) =>
+              onChange({ retentionDays: Math.round(v) } as Partial<Device>)
+            }
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+function NumberSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  display,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  display: (v: number) => string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs text-muted-foreground">{label}</Label>
+        <span className="font-mono text-[0.78rem] text-foreground/90 tabular-nums">
+          {display(value)}
+        </span>
+      </div>
+      <Slider
+        min={min}
+        max={max}
+        step={step}
+        value={[value]}
+        onValueChange={(v) => onChange(pickValue(v))}
+      />
+    </div>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-md border border-border bg-background/40 px-2 py-1.5 text-[0.85rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+      >
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * Quick "is this switch realistic?" summary for the user.
+ *  - Estimates average power per PoE+ camera (~25 W) so the user sees
+ *    "supports ~14 PoE+ cameras" rather than just a raw 370 W number.
+ */
+function PoeSummary({
+  portCount,
+  poeBudgetW,
+}: {
+  portCount: number;
+  poeBudgetW: number;
+}) {
+  const poeCameras = Math.floor(poeBudgetW / 25);
+  const usableCameras = Math.min(poeCameras, portCount);
+  return (
+    <div className="rounded-md bg-foreground/[0.04] px-2.5 py-1.5 text-[0.72rem] leading-snug text-muted-foreground">
+      Supports ~{usableCameras} PoE+ cameras (25 W ea) ·{" "}
+      {portCount - usableCameras > 0
+        ? `${portCount - usableCameras} ports left for non-PoE`
+        : "all ports loaded"}
     </div>
   );
 }

@@ -95,8 +95,17 @@ export interface SensorDevice extends DeviceBase {
 export interface NetworkDeviceBase extends DeviceBase {
   type: "network";
   networkType: NetworkSubtype;
+  /** Access-point only: wireless coverage radius in meters. */
   coverageMeters?: number;
+  /** Switch or NVR: number of physical ports / camera channels. */
   portCount?: number;
+  /** Switch only: total PoE power budget in watts. */
+  poeBudgetW?: number;
+  /** NVR only: storage capacity in TB and recording-retention days. */
+  storageTb?: number;
+  retentionDays?: number;
+  /** Wi-Fi standard for APs ("Wi-Fi 6" / "Wi-Fi 7" / etc.) */
+  wifiStandard?: string;
 }
 
 export type Device =

@@ -86,7 +86,11 @@ export function Scene3DCanvas({
   const { center, span, cameraPos } = frame;
   const maxDim = Math.max(span.x, span.z, 6);
 
-  const walkSpawn: [number, number, number] = [
+  // Walk spawn — uses the Pegman-drop override if the user dropped the
+  // character on the scene, otherwise a sensible default near the corner
+  // of the floor's bounding box.
+  const walkSpawnOverride = useDesignStore((s) => s.walkSpawnOverride);
+  const walkSpawn: [number, number, number] = walkSpawnOverride ?? [
     center.x - span.x * 0.3,
     1.65,
     center.z + span.z * 0.3,
@@ -116,8 +120,44 @@ export function Scene3DCanvas({
     return { x: hit.x * currentFloor.scale, y: hit.z * currentFloor.scale };
   }
 
+  /**
+   * Same as dropPointToPx, but returns world-space coordinates (the 3D
+   * scene's units) instead of floor-plan pixels. Used by the Pegman drop.
+   */
+  function dropPointWorld(
+    clientX: number,
+    clientY: number,
+  ): { x: number; z: number } | null {
+    const { camera } = handlesRef.current;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!camera || !rect) return null;
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, camera);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const hit = new THREE.Vector3();
+    if (!ray.ray.intersectPlane(plane, hit)) return null;
+    return { x: hit.x, z: hit.z };
+  }
+
   function onContainerDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
+
+    // Pegman drop — switches to walk mode at the dropped world point
+    const pegman = e.dataTransfer.getData("application/x-dv-pegman");
+    if (pegman === "1") {
+      const world = dropPointWorld(e.clientX, e.clientY);
+      if (!world) return;
+      useDesignStore
+        .getState()
+        .setWalkSpawnOverride([world.x, 1.65, world.z]);
+      useDesignStore.getState().setThreeDMode("walk");
+      return;
+    }
+
     const raw = e.dataTransfer.getData("application/x-dv-device");
     if (!raw) return;
     try {

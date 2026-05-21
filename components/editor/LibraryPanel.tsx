@@ -262,7 +262,13 @@ export function LibraryPanel() {
                             "active:scale-[0.99] cursor-grab active:cursor-grabbing",
                           )}
                         >
-                          <div className="relative size-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-black/[0.06] dark:ring-white/[0.04]">
+                          <div
+                            className="relative size-11 shrink-0"
+                            style={{
+                              filter:
+                                "drop-shadow(0 3px 4px rgba(0, 0, 0, 0.18))",
+                            }}
+                          >
                             <DevicePreview3D kind={preview} />
                           </div>
                           <div className="min-w-0 flex-1">

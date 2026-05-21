@@ -80,11 +80,17 @@ const ACCENT_COLORS = {
   network: "#8b5cf6",
 } as const;
 
+/**
+ * No more colored "studio" backgrounds — the device floats on the panel
+ * surface with a subtle drop shadow. Keeping the type-keyed map so call
+ * sites that read it still type-check, but every value is null now and
+ * the Canvas below renders without a `<color attach="background">`.
+ */
 const BACKGROUND_TINTS = {
-  camera: "#c5ecd4", // emerald 200-ish
-  reader: "#bee0fa", // sky 200
-  sensor: "#fde2a0", // amber 200
-  network: "#d3c4f7", // violet 200
+  camera: null,
+  reader: null,
+  sensor: null,
+  network: null,
 } as const;
 
 interface PreviewLayout {
@@ -289,17 +295,20 @@ export function DevicePreview3DCanvas({ kind }: { kind: PreviewKind }) {
           near: 0.1,
           far: 10,
         }}
-        gl={{ antialias: true }}
+        // alpha:true → transparent canvas so the device floats on whatever
+        // panel surface it lives on
+        gl={{ antialias: true, alpha: true }}
         onCreated={({ camera, gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1.25;
           gl.outputColorSpace = THREE.SRGBColorSpace;
+          gl.setClearColor(0x000000, 0);
           camera.lookAt(layout.lookAt[0], layout.lookAt[1], layout.lookAt[2]);
           camera.updateMatrixWorld(true);
         }}
         style={{ pointerEvents: "none" }}
       >
-      <color attach="background" args={[bg]} />
+      {bg !== null && <color attach="background" args={[bg]} />}
 
       {/* Studio-grade lighting: strong ambient + warm key + cool fill +
          accent rim from behind. Whole thing tuned for small (~56px) previews

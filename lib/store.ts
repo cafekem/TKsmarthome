@@ -91,6 +91,10 @@ interface DesignState {
   aiSurveyOpen: boolean;
   aiAdvisorOpen: boolean;
   visibility: VisibilityFilter;
+  /** When the user drops the "Pegman" character on the 3D scene, we
+      store the world-space drop point here. The 3D scene reads it as
+      the walk-mode spawn, replacing the auto-computed default. */
+  walkSpawnOverride: [number, number, number] | null;
 
   ensureDesign(id: string): DesignDocument;
   setCurrentDesign(id: string): void;
@@ -106,6 +110,7 @@ interface DesignState {
   setViewTransform(t: ViewTransform): void;
   setAISurveyOpen(open: boolean): void;
   setAIAdvisorOpen(open: boolean): void;
+  setWalkSpawnOverride(spawn: [number, number, number] | null): void;
   toggleDeviceTypeVisible(type: DeviceType): void;
   toggleInstallStatusVisible(status: InstallStatus): void;
   /** Bulk-reset to all-on (proposed+installed by default; decommissioned off). */
@@ -161,6 +166,7 @@ export const useDesignStore = create<DesignState>()(
         aiSurveyOpen: false,
         aiAdvisorOpen: false,
         visibility: DEFAULT_VISIBILITY,
+        walkSpawnOverride: null,
 
         ensureDesign(id) {
           const existing = get().designs[id];
@@ -233,6 +239,10 @@ export const useDesignStore = create<DesignState>()(
 
         setAIAdvisorOpen(open) {
           set({ aiAdvisorOpen: open });
+        },
+
+        setWalkSpawnOverride(spawn) {
+          set({ walkSpawnOverride: spawn });
         },
 
         toggleDeviceTypeVisible(type) {
