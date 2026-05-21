@@ -140,6 +140,16 @@ export function LibraryPanel() {
       }),
     );
     e.dataTransfer.effectAllowed = "copy";
+
+    // Custom drag preview — replace the native "row banner" with a small,
+    // device-shaped pill (same visual language as the 2D canvas marker) so
+    // the cursor carries just the item, not the entire library row.
+    const ghost = buildDragGhost(product);
+    document.body.appendChild(ghost);
+    // Center the ghost under the cursor (32×32 → offset 16,16).
+    e.dataTransfer.setDragImage(ghost, 24, 24);
+    // The browser owns the ghost for the duration of the drag; clean up after.
+    window.setTimeout(() => ghost.remove(), 0);
   }
 
   return (
@@ -305,4 +315,65 @@ export function LibraryPanel() {
       </ScrollArea>
     </aside>
   );
+}
+
+/* ── Drag ghost ─────────────────────────────────────────────────────────
+   Build a small offscreen DOM element used by `setDragImage` so the
+   cursor carries just the device (not the entire library row banner).
+   The element is added to the body so the browser can snapshot it, then
+   removed on the next tick. */
+
+const DRAG_GHOST_COLORS: Record<string, string> = {
+  camera: "#3b82f6",
+  reader: "#0ea5e9",
+  sensor: "#f59e0b",
+  network: "#a78bfa",
+};
+
+function buildDragGhost(product: CatalogProduct): HTMLElement {
+  const color = DRAG_GHOST_COLORS[product.category] ?? "#3b82f6";
+  const root = document.createElement("div");
+  // Position it offscreen so it's never visible to the user — the browser
+  // only needs it to exist long enough to snapshot for the drag image.
+  root.style.position = "fixed";
+  root.style.top = "-1000px";
+  root.style.left = "-1000px";
+  root.style.width = "48px";
+  root.style.height = "48px";
+  root.style.display = "flex";
+  root.style.alignItems = "center";
+  root.style.justifyContent = "center";
+  root.style.pointerEvents = "none";
+  root.style.fontFamily = "system-ui, sans-serif";
+
+  // Outer white ring (matches the 2D canvas marker).
+  const ring = document.createElement("div");
+  ring.style.width = "36px";
+  ring.style.height = "36px";
+  ring.style.borderRadius = "50%";
+  ring.style.background = "#ffffff";
+  ring.style.boxShadow = "0 6px 14px -4px rgba(0,0,0,0.35)";
+  ring.style.display = "flex";
+  ring.style.alignItems = "center";
+  ring.style.justifyContent = "center";
+  root.appendChild(ring);
+
+  // Inner colored body.
+  const body = document.createElement("div");
+  body.style.width = "28px";
+  body.style.height = "28px";
+  body.style.borderRadius = "50%";
+  body.style.background = color;
+  body.style.display = "flex";
+  body.style.alignItems = "center";
+  body.style.justifyContent = "center";
+  body.style.color = "#ffffff";
+  body.style.fontSize = "13px";
+  body.style.fontWeight = "600";
+  body.textContent = product.subcategory
+    ? product.subcategory.charAt(0).toUpperCase()
+    : "·";
+  ring.appendChild(body);
+
+  return root;
 }

@@ -97,10 +97,11 @@
   --sidebar-border: oklch(0 0 0 / 9%);
   --sidebar-ring: oklch(0.55 0.17 245 / 50%);
 
-  /* Canvas surface — soft "drawing paper" tint in light mode */
-  --canvas: oklch(0.965 0.008 240);
+  /* Canvas surface — warm cream "drawing paper" matching the 3D scene's
+     light-mode floor tones (#f3eee5 / #f0e7d8). Used by the 2D Konva canvas. */
+  --canvas: oklch(0.955 0.014 75);
   --canvas-accent: oklch(0.65 0.18 25 / 8%);
-  --grid-line: oklch(0 0 0 / 5%);
+  --grid-line: oklch(0.5 0.04 60 / 9%);
   --noise-tint: 0;
 }
 

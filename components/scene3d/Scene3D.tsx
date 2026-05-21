@@ -6,6 +6,7 @@ import { Box, Compass, Footprints, Move3d, Sparkles } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { LayerToggles } from "@/components/editor/LayerToggles";
 
 const Scene3DCanvas = dynamic(
   () => import("./Scene3DCanvas").then((m) => m.Scene3DCanvas),
@@ -49,6 +50,8 @@ export function Scene3D({ showSim = false }: { showSim?: boolean } = {}) {
       )}
 
       {isEmpty && <EmptyState />}
+
+      {!isEmpty && <LayerToggles />}
 
       <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-col gap-1.5">
         <div className="pointer-events-auto rounded-xl border border-border bg-card/85 p-1.5 shadow-2xl backdrop-blur">

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
 import { Canvas2DToolbar } from "./Toolbar";
 import { ShortcutsHint } from "./ShortcutsHint";
+import { LayerToggles } from "@/components/editor/LayerToggles";
 
 const Canvas2DStage = dynamic(
   () => import("./Canvas2DStage").then((m) => m.Canvas2DStage),
@@ -67,6 +68,7 @@ export function Canvas2D() {
         />
       )}
       <Canvas2DToolbar onFit={onFit} onUpload={onUploadClick} />
+      <LayerToggles />
       <ShortcutsHint />
       <input
         ref={fileInputRef}

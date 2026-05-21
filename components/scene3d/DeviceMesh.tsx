@@ -21,15 +21,31 @@ import type {
  * floor without the framerate tanking.
  */
 
-const HOUSING_DARK = "#18181b"; // zinc-900
-const HOUSING_MID = "#27272a"; // zinc-800
-const HOUSING_LIGHT = "#3f3f46"; // zinc-700
-const METAL = "#52525b"; // zinc-600
-const POLISHED = "#71717a"; // zinc-500
-const GLASS = "#0a0a0a";
-const PORCELAIN = "#e7e5e4"; // stone-200
-const READER_PANEL = "#1f2937"; // slate-800
-const OUTLINE = "#52525b";
+/**
+ * Realistic security-gear palette. Real cameras are mostly white/eggshell
+ * plastic (Verkada, Axis, Hanwha) with brushed-aluminum or silver accents
+ * and a dark lens. Old palette was all zinc-700-to-900 which read as
+ * uniformly black on the floor plan.
+ *
+ *   HOUSING_LIGHT  off-white dome covers, ceiling-mount bodies
+ *   HOUSING_MID    light gray bullet camera bodies
+ *   HOUSING_DARK   neutral charcoal — used sparingly for hardware accents
+ *   METAL          brushed aluminum mounts + bezels
+ *   POLISHED       chrome / mirror caps on PTZ heads
+ *   GLASS          near-black lens
+ *   PORCELAIN      reader / smoke-detector body
+ *   READER_PANEL   the dark glass face of card readers
+ *   OUTLINE        edge-detect outline on shapes for legibility
+ */
+const HOUSING_DARK = "#3f3f46"; // zinc-700 — accents only
+const HOUSING_MID = "#d4d4d8"; // zinc-300 — light gray bodies
+const HOUSING_LIGHT = "#f4f4f5"; // zinc-100 — off-white domes
+const METAL = "#a1a1aa"; // zinc-400 — brushed aluminum
+const POLISHED = "#e4e4e7"; // zinc-200 — bright chrome highlight
+const GLASS = "#18181b"; // dark glass lens
+const PORCELAIN = "#fafaf9"; // stone-50 — reader / smoke face
+const READER_PANEL = "#1f2937"; // slate-800 — reader display glass
+const OUTLINE = "#71717a"; // zinc-500 — softer outline
 
 interface DeviceMeshProps {
   device: Device;

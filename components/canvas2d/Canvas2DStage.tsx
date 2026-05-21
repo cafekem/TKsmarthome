@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Circle, Image as KImage, Layer, Line, Stage, Text } from "react-konva";
+import {
+  Circle,
+  Group,
+  Image as KImage,
+  Layer,
+  Line,
+  Stage,
+  Text,
+} from "react-konva";
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { toast } from "sonner";
@@ -33,6 +41,7 @@ export function Canvas2DStage({
   const tool = useDesignStore((s) => s.tool);
   const setTool = useDesignStore((s) => s.setTool);
   const showCoverage = useDesignStore((s) => s.showCoverage);
+  const visibility = useDesignStore((s) => s.visibility);
   const selectedId = useDesignStore((s) => s.selectedDeviceId);
   const selectDevice = useDesignStore((s) => s.selectDevice);
   const addDevice = useDesignStore((s) => s.addDevice);
@@ -170,6 +179,56 @@ export function Canvas2DStage({
       return;
     }
 
+    if (tool === "door" && floor) {
+      // Snap to the nearest wall: project the click onto each wall segment
+      // and pick the closest one. If nothing is within range, drop the door
+      // at the cursor with rotation = 0 so the user still sees something.
+      const snapPx = Math.max(40, floor.scale * 1.5);
+      let bestDist = Infinity;
+      let bestPos = point;
+      let bestRotation = 0;
+      let bestWallId = floor.walls[0]?.id ?? "";
+      for (const w of floor.walls) {
+        const dx = w.end.x - w.start.x;
+        const dy = w.end.y - w.start.y;
+        const len2 = dx * dx + dy * dy;
+        if (len2 === 0) continue;
+        const t = Math.max(
+          0,
+          Math.min(
+            1,
+            ((point.x - w.start.x) * dx + (point.y - w.start.y) * dy) / len2,
+          ),
+        );
+        const cx = w.start.x + t * dx;
+        const cy = w.start.y + t * dy;
+        const d = Math.hypot(point.x - cx, point.y - cy);
+        if (d < bestDist && d < snapPx) {
+          bestDist = d;
+          bestPos = { x: cx, y: cy };
+          bestRotation = Math.atan2(dy, dx);
+          bestWallId = w.id;
+        }
+      }
+      const store = useDesignStore.getState();
+      const door = store.addDoor(floor.id, {
+        position: bestPos,
+        rotation: bestRotation,
+        widthMeters: 0.9,
+        wallId: bestWallId,
+        locked: false,
+        label: `Door ${(floor.doors?.length ?? 0) + 1}`,
+        notes: "",
+      });
+      // Auto-select for quick editing
+      selectDevice(door.id);
+      toast.success("Door placed", {
+        description: "Drag to a wall, link a reader, or tap to edit.",
+      });
+      setTool("select");
+      return;
+    }
+
     // Select tool: clicking background clears selection
     selectDevice(null);
   }
@@ -267,7 +326,8 @@ export function Canvas2DStage({
   const scalePxPerMeter = floor?.scale ?? 50;
 
   const cursorStyle = useMemo(() => {
-    if (tool === "wall" || tool === "calibrate") return "crosshair";
+    if (tool === "wall" || tool === "calibrate" || tool === "door")
+      return "crosshair";
     return "default";
   }, [tool]);
 
@@ -284,21 +344,22 @@ export function Canvas2DStage({
         e.dataTransfer.dropEffect = "copy";
       }}
     >
-      {/* Atmospheric wash — subtle blue radial vignette */}
+      {/* Atmospheric wash — warm cream radial highlight echoing the 3D
+          scene's light-mode floor */}
       <div
         className="pointer-events-none absolute inset-0 z-0"
         style={{
           background:
-            "radial-gradient(ellipse 80% 60% at 50% 35%, color-mix(in oklch, var(--primary) 5%, transparent) 0%, transparent 65%)",
+            "radial-gradient(ellipse 80% 60% at 50% 35%, rgba(245, 230, 200, 0.35) 0%, transparent 65%)",
         }}
         aria-hidden="true"
       />
-      {/* Edge fade — slight darkening at the outer edges adds depth */}
+      {/* Edge fade — slight warm darkening at the outer edges adds depth */}
       <div
         className="pointer-events-none absolute inset-0 z-0"
         style={{
           background:
-            "radial-gradient(ellipse 95% 95% at 50% 50%, transparent 55%, rgba(0,0,0,0.04) 100%)",
+            "radial-gradient(ellipse 95% 95% at 50% 50%, transparent 55%, rgba(80, 60, 35, 0.08) 100%)",
         }}
         aria-hidden="true"
       />
@@ -361,6 +422,74 @@ export function Canvas2DStage({
             />
           ))}
 
+          {/* Doors — architectural symbol: short opening line + 90° swing arc */}
+          {(floor.doors ?? []).map((door) => {
+            const widthPx = door.widthMeters * scalePxPerMeter;
+            const half = widthPx / 2;
+            const cos = Math.cos(door.rotation);
+            const sin = Math.sin(door.rotation);
+            const hingeX = door.position.x - cos * half;
+            const hingeY = door.position.y - sin * half;
+            // The swing arc starts at the hinge and arcs 90° toward the room.
+            // We approximate with 8 line segments — Konva doesn't have a
+            // first-class arc primitive that works for our needs cheaply.
+            const arcPoints: number[] = [];
+            const segments = 12;
+            for (let i = 0; i <= segments; i++) {
+              const t = (i / segments) * (Math.PI / 2);
+              const px = hingeX + Math.cos(door.rotation + t) * widthPx;
+              const py = hingeY + Math.sin(door.rotation + t) * widthPx;
+              arcPoints.push(px, py);
+            }
+            // Lock state drives color — red for locked, neutral for unlocked.
+            const stroke = door.locked ? "#ef4444" : "#475569";
+            return (
+              <Group
+                key={door.id}
+                listening
+                onClick={(e: KonvaEventObject<MouseEvent>) => {
+                  e.cancelBubble = true;
+                  selectDevice(door.id);
+                }}
+                onTap={(e: KonvaEventObject<TouchEvent>) => {
+                  e.cancelBubble = true;
+                  selectDevice(door.id);
+                }}
+              >
+                {/* The door opening itself — a thicker line in the wall */}
+                <Line
+                  points={[
+                    hingeX,
+                    hingeY,
+                    hingeX + cos * widthPx,
+                    hingeY + sin * widthPx,
+                  ]}
+                  stroke={stroke}
+                  strokeWidth={2}
+                  lineCap="round"
+                  opacity={0.95}
+                />
+                {/* Swing arc */}
+                <Line
+                  points={arcPoints}
+                  stroke={stroke}
+                  strokeWidth={1}
+                  dash={[3, 3]}
+                  opacity={0.7}
+                  listening={false}
+                />
+                {/* Hinge dot */}
+                <Circle
+                  x={hingeX}
+                  y={hingeY}
+                  radius={2}
+                  fill={stroke}
+                  listening={false}
+                />
+              </Group>
+            );
+          })}
+
           {/* Wall drawing preview */}
           {tool === "wall" && wallPoints.length > 0 && pendingCursor && (
             <Line
@@ -390,24 +519,30 @@ export function Canvas2DStage({
             />
           )}
 
-          {/* Devices */}
-          {floor.devices.map((device) => (
-            <DeviceShape
-              key={device.id}
-              device={device}
-              scalePxPerMeter={scalePxPerMeter}
-              selected={device.id === selectedId}
-              showCoverage={showCoverage}
-              walls={floor.walls}
-              onSelect={() => selectDevice(device.id)}
-              onMove={(x, y) =>
-                updateDevice(floor.id, device.id, { position: { x, y } })
-              }
-              onRotate={(r) =>
-                updateDevice(floor.id, device.id, { rotation: r })
-              }
-            />
-          ))}
+          {/* Devices — filtered through layer visibility */}
+          {floor.devices
+            .filter(
+              (d) =>
+                visibility.byType[d.type] &&
+                visibility.byStatus[d.installStatus ?? "proposed"],
+            )
+            .map((device) => (
+              <DeviceShape
+                key={device.id}
+                device={device}
+                scalePxPerMeter={scalePxPerMeter}
+                selected={device.id === selectedId}
+                showCoverage={showCoverage}
+                walls={floor.walls}
+                onSelect={() => selectDevice(device.id)}
+                onMove={(x, y) =>
+                  updateDevice(floor.id, device.id, { position: { x, y } })
+                }
+                onRotate={(r) =>
+                  updateDevice(floor.id, device.id, { rotation: r })
+                }
+              />
+            ))}
         </Layer>
       </Stage>
 

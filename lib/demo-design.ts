@@ -50,7 +50,10 @@ function demoWalls(): Wall[] {
 function demoDevices(): Array<
   CameraDevice | ReaderDevice | SensorDevice | NetworkDeviceBase
 > {
-  return [
+  // Build the device literals as a permissive list, then backfill the new
+  // lifecycle fields uniformly so each literal block stays focused on its
+  // type-specific config (camera/reader/sensor/network fields).
+  const devices: Array<Record<string, unknown>> = [
     // PTZ camera covering reception entrance
     {
       id: uid("dev"),
@@ -184,6 +187,16 @@ function demoDevices(): Array<
       notes: "32 channels",
     },
   ];
+  // Backfill the new lifecycle fields uniformly. Most devices are "installed"
+  // in the demo so the layer toggles + critical-date reports have something
+  // realistic to show; the lobby PTZ is the one "proposed" item.
+  return devices.map((d, i) => ({
+    ...d,
+    installStatus: i === 0 ? "proposed" : "installed",
+    photos: [],
+  })) as unknown as Array<
+    CameraDevice | ReaderDevice | SensorDevice | NetworkDeviceBase
+  >;
 }
 
 /**
@@ -214,13 +227,50 @@ function demoSimPath() {
 }
 
 export function buildDemoFloor(): Omit<Floor, "id" | "index"> {
+  const walls = demoWalls();
   return {
     name: "Ground floor — demo office",
     planImage: "/demo/office-floor.svg",
     scale: 50,
     ceilingHeight: 3.0,
-    walls: demoWalls(),
+    walls,
     devices: demoDevices(),
+    doors: demoDoors(walls),
     simPath: demoSimPath(),
   };
+}
+
+/**
+ * Two demo doors: the front entry (controlled by the front card reader) and
+ * the server-room door (controlled by the biometric reader). Both are placed
+ * on visible door gaps in the wall network so the swing arcs make sense.
+ */
+function demoDoors(walls: Wall[]) {
+  // Pick the first wall as a placement reference so we have an angle.
+  // (The exact wall id matters for linkage in real use; the demo just needs
+  // a couple of plausible doors.)
+  const firstWall = walls[0];
+  const wallId = firstWall?.id ?? "demo-wall";
+  return [
+    {
+      id: "door_front",
+      position: { x: 330, y: 130 },
+      rotation: 0,
+      widthMeters: 0.95,
+      wallId,
+      locked: false,
+      label: "Front entry",
+      notes: "Main public entrance; badge-in during business hours.",
+    },
+    {
+      id: "door_server",
+      position: { x: 850, y: 270 },
+      rotation: 0,
+      widthMeters: 0.9,
+      wallId,
+      locked: true,
+      label: "Server room",
+      notes: "Restricted — biometric required 24/7.",
+    },
+  ];
 }

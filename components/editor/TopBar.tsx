@@ -25,7 +25,6 @@ export function TopBar() {
   const updateName = useDesignStore((s) => s.updateDesignName);
   const importDesign = useDesignStore((s) => s.importDesign);
   const quoteSettings = useDesignStore((s) => s.quoteSettings);
-  const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -114,17 +113,9 @@ export function TopBar() {
         <div className="flex flex-1 items-center justify-end gap-1">
           <ThemeToggle size="sm" className="mr-0.5" />
 
-          {/* AI Survey trigger — sparkles button so the killer feature is
-              always one click away even after the empty state is dismissed. */}
-          <button
-            type="button"
-            onClick={() => setAISurveyOpen(true)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[0.8rem] font-medium text-primary transition-colors hover:bg-primary/10"
-            aria-label="Generate design with AI"
-          >
-            <Sparkles className="size-3.5" strokeWidth={1.8} />
-            <span className="hidden sm:inline">AI</span>
-          </button>
+          {/* AI menu — Survey + Advisor */}
+          <AIMenu />
+
 
           {/* File menu — Import / Save grouped into one menu */}
           <FileMenu
@@ -163,6 +154,10 @@ export function TopBar() {
                       await exportFloorPlanPDF(design, floor, {
                         preparedBy: quoteSettings.preparedBy,
                         preparedFor: quoteSettings.clientName,
+                        companyLogoDataUrl:
+                          quoteSettings.companyLogoDataUrl || undefined,
+                        brandColor: quoteSettings.brandColor || undefined,
+                        printFooter: quoteSettings.printFooter || undefined,
                       });
                       toast.success("PDF exported");
                     }}
@@ -229,6 +224,88 @@ export function TopBar() {
       </header>
       <QuoteDrawer open={quoteOpen} onClose={() => setQuoteOpen(false)} />
     </>
+  );
+}
+
+/**
+ * Top-bar AI dropdown — Survey (auto-design from image) + Advisor (analyse
+ * coverage of an existing design). Both trigger state living in the design
+ * store so the actual UI (dialog / drawer) is mounted at EditorShell level.
+ */
+function AIMenu() {
+  const [open, setOpen] = useState(false);
+  const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
+  const setAIAdvisorOpen = useDesignStore((s) => s.setAIAdvisorOpen);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[0.8rem] font-medium text-primary transition-colors hover:bg-primary/10"
+        aria-label="AI features"
+      >
+        <Sparkles className="size-3.5" strokeWidth={1.8} />
+        <span className="hidden sm:inline">AI</span>
+        <ChevronDown className="size-3 ml-0.5 opacity-70" />
+      </button>
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-popover p-1 shadow-lg">
+            <AIMenuItem
+              title="Generate design from plan"
+              description="Upload a floor plan, get walls + devices."
+              onClick={() => {
+                setOpen(false);
+                setAISurveyOpen(true);
+              }}
+            />
+            <AIMenuItem
+              title="Analyze coverage"
+              description="Find blind spots, redundancies, compliance gaps."
+              onClick={() => {
+                setOpen(false);
+                setAIAdvisorOpen(true);
+              }}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AIMenuItem({
+  title,
+  description,
+  onClick,
+}: {
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted/60"
+    >
+      <Sparkles
+        className="mt-0.5 size-3.5 shrink-0 text-primary"
+        strokeWidth={1.8}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="text-[0.82rem] font-medium tracking-[-0.005em]">
+          {title}
+        </div>
+        <div className="text-[0.7rem] text-muted-foreground leading-snug">
+          {description}
+        </div>
+      </div>
+    </button>
   );
 }
 

@@ -6,8 +6,11 @@ import { temporal } from "zundo";
 import type {
   DesignDocument,
   Device,
+  DevicePhoto,
   DeviceType,
+  Door,
   Floor,
+  InstallStatus,
   ThreeDMode,
   Vec2,
   ViewMode,
@@ -41,6 +44,7 @@ function createDefaultFloor(): Floor {
     ceilingHeight: 2.7,
     walls: [],
     devices: [],
+    doors: [],
   };
 }
 
@@ -56,12 +60,23 @@ export function createDefaultDesign(id?: string): DesignDocument {
   };
 }
 
-export type Tool = "select" | "wall" | "calibrate";
+export type Tool = "select" | "wall" | "calibrate" | "door";
 
 export interface ViewTransform {
   scale: number;
   offset: Vec2;
 }
+
+/** Which device categories are currently visible on the canvas. */
+export interface VisibilityFilter {
+  byType: Record<DeviceType, boolean>;
+  byStatus: Record<InstallStatus, boolean>;
+}
+
+export const DEFAULT_VISIBILITY: VisibilityFilter = {
+  byType: { camera: true, reader: true, sensor: true, network: true },
+  byStatus: { proposed: true, installed: true, decommissioned: false },
+};
 
 interface DesignState {
   designs: Record<string, DesignDocument>;
@@ -74,6 +89,8 @@ interface DesignState {
   viewTransform: ViewTransform;
   quoteSettings: QuoteSettings;
   aiSurveyOpen: boolean;
+  aiAdvisorOpen: boolean;
+  visibility: VisibilityFilter;
 
   ensureDesign(id: string): DesignDocument;
   setCurrentDesign(id: string): void;
@@ -88,6 +105,14 @@ interface DesignState {
   toggleCoverage(): void;
   setViewTransform(t: ViewTransform): void;
   setAISurveyOpen(open: boolean): void;
+  setAIAdvisorOpen(open: boolean): void;
+  toggleDeviceTypeVisible(type: DeviceType): void;
+  toggleInstallStatusVisible(status: InstallStatus): void;
+  /** Bulk-reset to all-on (proposed+installed by default; decommissioned off). */
+  resetVisibility(): void;
+  /** Photos: add/remove on a specific device. */
+  addDevicePhoto(floorId: string, deviceId: string, photo: DevicePhoto): void;
+  removeDevicePhoto(floorId: string, deviceId: string, photoId: string): void;
 
   addFloor(): void;
   setActiveFloor(floorId: string): void;
@@ -99,6 +124,10 @@ interface DesignState {
 
   addWall(floorId: string, wall: Omit<Wall, "id">): void;
   removeWall(floorId: string, wallId: string): void;
+
+  addDoor(floorId: string, door: Omit<Door, "id">): Door;
+  updateDoor(floorId: string, doorId: string, partial: Partial<Door>): void;
+  removeDoor(floorId: string, doorId: string): void;
 
   loadDemo(): void;
 }
@@ -130,6 +159,8 @@ export const useDesignStore = create<DesignState>()(
         viewTransform: { scale: 1, offset: { x: 0, y: 0 } },
         quoteSettings: DEFAULT_QUOTE_SETTINGS,
         aiSurveyOpen: false,
+        aiAdvisorOpen: false,
+        visibility: DEFAULT_VISIBILITY,
 
         ensureDesign(id) {
           const existing = get().designs[id];
@@ -198,6 +229,103 @@ export const useDesignStore = create<DesignState>()(
 
         setAISurveyOpen(open) {
           set({ aiSurveyOpen: open });
+        },
+
+        setAIAdvisorOpen(open) {
+          set({ aiAdvisorOpen: open });
+        },
+
+        toggleDeviceTypeVisible(type) {
+          set((state) => ({
+            visibility: {
+              ...state.visibility,
+              byType: {
+                ...state.visibility.byType,
+                [type]: !state.visibility.byType[type],
+              },
+            },
+          }));
+        },
+
+        toggleInstallStatusVisible(status) {
+          set((state) => ({
+            visibility: {
+              ...state.visibility,
+              byStatus: {
+                ...state.visibility.byStatus,
+                [status]: !state.visibility.byStatus[status],
+              },
+            },
+          }));
+        },
+
+        resetVisibility() {
+          set({ visibility: DEFAULT_VISIBILITY });
+        },
+
+        addDevicePhoto(floorId, deviceId, photo) {
+          set((state) => {
+            const id = state.currentDesignId;
+            if (!id) return state;
+            const design = state.designs[id];
+            if (!design) return state;
+            return {
+              designs: {
+                ...state.designs,
+                [id]: {
+                  ...design,
+                  floors: design.floors.map((f) =>
+                    f.id === floorId
+                      ? {
+                          ...f,
+                          devices: f.devices.map((d) =>
+                            d.id === deviceId
+                              ? { ...d, photos: [...(d.photos ?? []), photo] }
+                              : d,
+                          ),
+                        }
+                      : f,
+                  ),
+                  updatedAt: nowISO(),
+                },
+              },
+            };
+          });
+        },
+
+        removeDevicePhoto(floorId, deviceId, photoId) {
+          set((state) => {
+            const id = state.currentDesignId;
+            if (!id) return state;
+            const design = state.designs[id];
+            if (!design) return state;
+            return {
+              designs: {
+                ...state.designs,
+                [id]: {
+                  ...design,
+                  floors: design.floors.map((f) =>
+                    f.id === floorId
+                      ? {
+                          ...f,
+                          devices: f.devices.map((d) =>
+                            d.id === deviceId
+                              ? {
+                                  ...d,
+                                  photos: (d.photos ?? []).filter(
+                                    (p) => p.id !== photoId,
+                                  ),
+                                }
+                              : d,
+                          ),
+                        }
+                      : f,
+                  ),
+                  updatedAt: nowISO(),
+                },
+              },
+            };
+          });
         },
 
         addFloor() {
@@ -436,6 +564,92 @@ export const useDesignStore = create<DesignState>()(
           });
         },
 
+        addDoor(floorId, door) {
+          const newDoor: Door = { ...door, id: uid("door") };
+          set((state) => {
+            const id = state.currentDesignId;
+            if (!id) return state;
+            const design = state.designs[id];
+            if (!design) return state;
+            return {
+              designs: {
+                ...state.designs,
+                [id]: {
+                  ...design,
+                  floors: design.floors.map((f) =>
+                    f.id === floorId
+                      ? { ...f, doors: [...(f.doors ?? []), newDoor] }
+                      : f,
+                  ),
+                  updatedAt: nowISO(),
+                },
+              },
+            };
+          });
+          return newDoor;
+        },
+
+        updateDoor(floorId, doorId, partial) {
+          set((state) => {
+            const id = state.currentDesignId;
+            if (!id) return state;
+            const design = state.designs[id];
+            if (!design) return state;
+            return {
+              designs: {
+                ...state.designs,
+                [id]: {
+                  ...design,
+                  floors: design.floors.map((f) =>
+                    f.id === floorId
+                      ? {
+                          ...f,
+                          doors: (f.doors ?? []).map((d) =>
+                            d.id === doorId ? { ...d, ...partial } : d,
+                          ),
+                        }
+                      : f,
+                  ),
+                  updatedAt: nowISO(),
+                },
+              },
+            };
+          });
+        },
+
+        removeDoor(floorId, doorId) {
+          set((state) => {
+            const id = state.currentDesignId;
+            if (!id) return state;
+            const design = state.designs[id];
+            if (!design) return state;
+            return {
+              designs: {
+                ...state.designs,
+                [id]: {
+                  ...design,
+                  floors: design.floors.map((f) =>
+                    f.id === floorId
+                      ? {
+                          ...f,
+                          doors: (f.doors ?? []).filter((d) => d.id !== doorId),
+                          // Also clear any reader that controlled this door.
+                          devices: f.devices.map((dev) =>
+                            dev.type === "reader" &&
+                            dev.controlsDoorId === doorId
+                              ? { ...dev, controlsDoorId: undefined }
+                              : dev,
+                          ),
+                        }
+                      : f,
+                  ),
+                  updatedAt: nowISO(),
+                },
+              },
+            };
+          });
+        },
+
         loadDemo() {
           set((state) => {
             const id = state.currentDesignId;
@@ -473,7 +687,39 @@ export const useDesignStore = create<DesignState>()(
     ),
     {
       name: "deeper-vision-store",
-      version: 3,
+      version: 5,
+      // v3 → v4: added installStatus, photos, warrantyUntil, lastInspectionAt,
+      //          endOfLifeAt to every device.
+      // v4 → v5: added Floor.doors[]. Initialize to empty array on old floors.
+      migrate: (persistedState, fromVersion) => {
+        const state = persistedState as {
+          designs?: Record<string, DesignDocument>;
+        };
+        if (!state?.designs) return state;
+        if (fromVersion < 4) {
+          for (const design of Object.values(state.designs)) {
+            for (const floor of design.floors ?? []) {
+              for (const device of floor.devices ?? []) {
+                const d = device as Device & {
+                  installStatus?: InstallStatus;
+                  photos?: DevicePhoto[];
+                };
+                if (d.installStatus === undefined) d.installStatus = "proposed";
+                if (!Array.isArray(d.photos)) d.photos = [];
+              }
+            }
+          }
+        }
+        if (fromVersion < 5) {
+          for (const design of Object.values(state.designs)) {
+            for (const floor of design.floors ?? []) {
+              const f = floor as Floor & { doors?: unknown };
+              if (!Array.isArray(f.doors)) f.doors = [];
+            }
+          }
+        }
+        return state;
+      },
       partialize: (state) => ({
         designs: state.designs,
         currentDesignId: state.currentDesignId,
@@ -481,6 +727,7 @@ export const useDesignStore = create<DesignState>()(
         threeDMode: state.threeDMode,
         showCoverage: state.showCoverage,
         quoteSettings: state.quoteSettings,
+        visibility: state.visibility,
       }),
     }
   )

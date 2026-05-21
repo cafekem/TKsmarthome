@@ -10,6 +10,7 @@ import { Canvas2D } from "@/components/canvas2d/Canvas2D";
 import { Scene3D } from "@/components/scene3d/Scene3D";
 import { SimView } from "@/components/simulation/SimView";
 import { AISurveyDialog } from "@/components/ai/AISurveyDialog";
+import { AIAdvisorPanel } from "@/components/ai/AIAdvisorPanel";
 
 function useHasHydrated() {
   const [hydrated, setHydrated] = useState(false);
@@ -22,16 +23,24 @@ function useHasHydrated() {
 export function EditorShell({ designId }: { designId: string }) {
   const ensureDesign = useDesignStore((s) => s.ensureDesign);
   const setCurrent = useDesignStore((s) => s.setCurrentDesign);
+  const setViewMode = useDesignStore((s) => s.setViewMode);
   const mode = useDesignStore((s) => s.viewMode);
   const aiSurveyOpen = useDesignStore((s) => s.aiSurveyOpen);
   const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
+  const aiAdvisorOpen = useDesignStore((s) => s.aiAdvisorOpen);
+  const setAIAdvisorOpen = useDesignStore((s) => s.setAIAdvisorOpen);
   const hydrated = useHasHydrated();
 
   useEffect(() => {
     if (!hydrated) return;
     ensureDesign(designId);
     setCurrent(designId);
-  }, [designId, ensureDesign, setCurrent, hydrated]);
+    // Always land in 2D when the editor mounts — even if the user was in 3D or
+    // Sim mode last time. They can still flip back to the other modes via the
+    // mode switcher; this just prevents the editor from "stranding" the user
+    // in a mode that requires content they haven't created yet.
+    setViewMode("2d");
+  }, [designId, ensureDesign, setCurrent, setViewMode, hydrated]);
 
   if (!hydrated) {
     return <div className="flex h-screen items-center justify-center" />;
@@ -57,6 +66,10 @@ export function EditorShell({ designId }: { designId: string }) {
       <AISurveyDialog
         open={aiSurveyOpen}
         onClose={() => setAISurveyOpen(false)}
+      />
+      <AIAdvisorPanel
+        open={aiAdvisorOpen}
+        onClose={() => setAIAdvisorOpen(false)}
       />
     </div>
   );

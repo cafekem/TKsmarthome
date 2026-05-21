@@ -57,6 +57,12 @@ export function DeviceShape({
   onRotate,
 }: DeviceShapeProps) {
   const color = COLORS[device.type];
+  // Lifecycle stage drives a subtle opacity treatment so an installed
+  // floor reads at full strength and proposed/retired devices look like
+  // overlays. (Filtering happens upstream in Canvas2DStage via visibility.)
+  const status = device.installStatus ?? "proposed";
+  const groupOpacity =
+    status === "decommissioned" ? 0.35 : status === "proposed" ? 0.78 : 1;
   const { x, y } = device.position;
   const rotation = device.rotation;
   const canSnap = WALL_MOUNTABLE[device.type] && walls.length > 0;
@@ -89,6 +95,7 @@ export function DeviceShape({
     <Group
       x={x}
       y={y}
+      opacity={groupOpacity}
       draggable
       dragBoundFunc={
         canSnap

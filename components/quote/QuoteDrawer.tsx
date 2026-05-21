@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Loader2, Printer, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/lib/store";
 import { computeQuote, formatUSD } from "@/lib/pricing";
 import { runAIQuote, summarizeFloorForQuote } from "@/lib/ai-quote";
+import { planCabling } from "@/lib/cabling";
 import { cn } from "@/lib/utils";
 
 interface QuoteDrawerProps {
@@ -23,10 +24,26 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
   const quoteSettings = useDesignStore((s) => s.quoteSettings);
   const updateQuoteSettings = useDesignStore((s) => s.updateQuoteSettings);
 
-  const breakdown = useMemo(
-    () => (floor ? computeQuote(floor, quoteSettings) : null),
-    [floor, quoteSettings]
+  // Auto-route cabling so the BoM's cabling line reflects real run lengths
+  // instead of a flat per-device estimate.
+  const cabling = useMemo(
+    () => (floor ? planCabling(floor) : null),
+    [floor],
   );
+
+  const breakdown = useMemo(() => {
+    if (!floor) return null;
+    return computeQuote(floor, {
+      ...quoteSettings,
+      autoCabling: cabling
+        ? {
+            totalLengthM: cabling.totalLengthM,
+            cameraRuns: cabling.cameraRuns,
+            readerRuns: cabling.readerRuns,
+          }
+        : undefined,
+    });
+  }, [floor, quoteSettings, cabling]);
 
   // AI Quote dialog state
   const [aiQuoteRunning, setAiQuoteRunning] = useState(false);
@@ -146,16 +163,36 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
         >
           {/* Header for print */}
           <div className="hidden print:block">
-            <div className="flex items-end justify-between border-b border-black/20 pb-4">
-              <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-black/50">
-                  Quote — Security System Design
-                </div>
-                <div className="mt-1 text-2xl font-medium">
-                  {design?.name ?? "Untitled design"}
-                </div>
-                <div className="mt-0.5 text-sm text-black/60">
-                  Floor: {floor?.name ?? "—"}
+            <div
+              className="flex items-end justify-between border-b pb-4"
+              style={{
+                borderColor: quoteSettings.brandColor || "rgba(0,0,0,0.2)",
+              }}
+            >
+              <div className="flex items-end gap-4">
+                {quoteSettings.companyLogoDataUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={quoteSettings.companyLogoDataUrl}
+                    alt="Company logo"
+                    className="max-h-16 max-w-[220px] object-contain"
+                  />
+                )}
+                <div>
+                  <div
+                    className="text-xs uppercase tracking-[0.2em]"
+                    style={{
+                      color: quoteSettings.brandColor || "rgba(0,0,0,0.5)",
+                    }}
+                  >
+                    Quote — Security System Design
+                  </div>
+                  <div className="mt-1 text-2xl font-medium">
+                    {design?.name ?? "Untitled design"}
+                  </div>
+                  <div className="mt-0.5 text-sm text-black/60">
+                    Floor: {floor?.name ?? "—"}
+                  </div>
                 </div>
               </div>
               <div className="text-right text-sm">
@@ -198,6 +235,15 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
               onChange={(v) => updateQuoteSettings({ preparedBy: v })}
             />
           </div>
+
+          {/* Branding — logo upload + brand color (screen only). White-labels
+              the printed PDF. */}
+          <BrandingSection
+            companyLogoDataUrl={quoteSettings.companyLogoDataUrl}
+            brandColor={quoteSettings.brandColor}
+            printFooter={quoteSettings.printFooter}
+            onChange={updateQuoteSettings}
+          />
 
           {/* AI Quote Assistant — screen only */}
           <section className="print:hidden">
@@ -355,7 +401,11 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
                   value={breakdown.laborSubtotal}
                 />
                 <LineItem
-                  label="Cabling, connectors, terminations"
+                  label={
+                    cabling && cabling.totalLengthM > 0
+                      ? `Cabling, connectors, terminations (auto-routed ${cabling.totalLengthM.toFixed(0)} m across ${cabling.runs.length} drops)`
+                      : "Cabling, connectors, terminations"
+                  }
                   value={breakdown.cablingSubtotal}
                 />
                 <LineItem
@@ -472,12 +522,23 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
             </section>
           )}
 
-          {/* Footer note (print) */}
-          <div className="hidden print:block text-[0.72rem] text-black/55 pt-6 border-t border-black/15">
+          {/* Footer (print) — branded if a custom footer line was set */}
+          <div
+            className="hidden print:block text-[0.72rem] text-black/55 pt-6 border-t"
+            style={{
+              borderColor: quoteSettings.brandColor || "rgba(0,0,0,0.15)",
+            }}
+          >
+            {quoteSettings.printFooter ? (
+              <div className="mb-2 text-black/80">{quoteSettings.printFooter}</div>
+            ) : null}
             Estimate valid for 30 days from date of issue. Pricing reflects
             standard distributor rates and is subject to availability. Final
             invoice may vary based on on-site conditions and material lead
-            times. Generated by DeeperVision.
+            times.{" "}
+            {quoteSettings.companyLogoDataUrl
+              ? ""
+              : "Generated by DeeperVision."}
           </div>
         </div>
       </aside>
@@ -558,6 +619,177 @@ function Field({
         className="mt-1 w-full rounded-md border border-border bg-background/40 px-2 py-1.5 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
       />
     </label>
+  );
+}
+
+/**
+ * White-label section: company logo upload + brand color + custom footer
+ * line. The logo is stored as a data URL on QuoteSettings so it persists
+ * with the design and applies to every PDF export.
+ */
+function BrandingSection({
+  companyLogoDataUrl,
+  brandColor,
+  printFooter,
+  onChange,
+}: {
+  companyLogoDataUrl: string;
+  brandColor: string;
+  printFooter: string;
+  onChange: (partial: Partial<{
+    companyLogoDataUrl: string;
+    brandColor: string;
+    printFooter: string;
+  }>) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function handleLogo(file: File | undefined) {
+    if (!file) return;
+    // Compress + cap so the design file stays small even with a 4K logo.
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const src = String(reader.result);
+        const img = new Image();
+        await new Promise<void>((res, rej) => {
+          img.onload = () => res();
+          img.onerror = () => rej(new Error("bad image"));
+          img.src = src;
+        });
+        const maxEdge = 600;
+        const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, w, h);
+        const isPng = file.type === "image/png";
+        const dataUrl = canvas.toDataURL(
+          isPng ? "image/png" : "image/jpeg",
+          isPng ? undefined : 0.9,
+        );
+        onChange({ companyLogoDataUrl: dataUrl });
+        toast.success("Logo added", {
+          description: "Will appear on the printed PDF.",
+        });
+      } catch (err) {
+        toast.error("Couldn't load that logo", {
+          description: err instanceof Error ? err.message : "Unknown error",
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <section className="print:hidden">
+      <SectionHeading>Branding</SectionHeading>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        {/* Logo */}
+        <div className="space-y-1.5">
+          <div className="text-[0.74rem] text-muted-foreground">
+            Company logo
+          </div>
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-lg border border-border bg-background/40 overflow-hidden">
+              {companyLogoDataUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={companyLogoDataUrl}
+                  alt="Logo preview"
+                  className="max-h-full max-w-full object-contain"
+                />
+              ) : (
+                <span className="text-[0.65rem] text-muted-foreground/60">
+                  None
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="rounded-md bg-foreground text-background px-2.5 py-1 text-[0.74rem] font-medium hover:bg-foreground/85"
+              >
+                {companyLogoDataUrl ? "Replace" : "Upload"}
+              </button>
+              {companyLogoDataUrl && (
+                <button
+                  type="button"
+                  onClick={() => onChange({ companyLogoDataUrl: "" })}
+                  className="rounded-md px-2.5 py-1 text-[0.7rem] text-muted-foreground hover:text-foreground"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/svg+xml,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              handleLogo(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+        </div>
+
+        {/* Brand color */}
+        <div className="space-y-1.5">
+          <div className="text-[0.74rem] text-muted-foreground">
+            Accent color
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={brandColor || "#1c1d20"}
+              onChange={(e) => onChange({ brandColor: e.target.value })}
+              className="size-10 rounded-md border border-border bg-transparent p-1"
+            />
+            <input
+              type="text"
+              value={brandColor}
+              onChange={(e) => onChange({ brandColor: e.target.value })}
+              placeholder="#3b82f6"
+              className="flex-1 rounded-md border border-border bg-background/40 px-2 py-1.5 font-mono text-[0.78rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+            />
+            {brandColor && (
+              <button
+                type="button"
+                onClick={() => onChange({ brandColor: "" })}
+                className="text-[0.7rem] text-muted-foreground hover:text-foreground"
+                title="Clear color"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer line */}
+      <div className="mt-3 space-y-1.5">
+        <div className="text-[0.74rem] text-muted-foreground">
+          Print footer line{" "}
+          <span className="text-muted-foreground/60 font-normal">
+            (optional — terms, license #, contact)
+          </span>
+        </div>
+        <input
+          type="text"
+          value={printFooter}
+          onChange={(e) => onChange({ printFooter: e.target.value })}
+          placeholder="ACME Security Integrators · Lic #C-7234 · sales@acme.com"
+          className="w-full rounded-md border border-border bg-background/40 px-2 py-1.5 text-[0.78rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+        />
+      </div>
+    </section>
   );
 }
 

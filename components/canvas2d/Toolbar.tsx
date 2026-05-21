@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DoorOpen,
   Eye,
   EyeOff,
   Maximize,
@@ -50,6 +51,13 @@ export function Canvas2DToolbar({ onFit, onUpload }: ToolbarProps) {
         shortcut="W"
         active={tool === "wall"}
         onClick={() => setTool("wall")}
+      />
+      <ToolButton
+        icon={DoorOpen}
+        label="Place door (click a wall)"
+        shortcut="D"
+        active={tool === "door"}
+        onClick={() => setTool("door")}
       />
       <ToolButton
         icon={Ruler}

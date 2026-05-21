@@ -80,6 +80,15 @@ export interface QuoteSettings {
   clientName: string;
   /** Project location used by the AI Quote Assistant. Display + cost driver. */
   projectLocation: string;
+  /** Company logo as a data URL — shown on the printed quote and PDF reports. */
+  companyLogoDataUrl: string;
+  /** Optional brand-accent color (hex) used for borders/headings in the print view. */
+  brandColor: string;
+  /** Footer line shown on printed pages (terms, license #, contact). */
+  printFooter: string;
+  /** Auto-routed cabling plan summary. When set + non-zero, used in place of
+      the flat per-device cabling estimate. */
+  autoCabling?: { totalLengthM: number; cameraRuns: number; readerRuns: number };
   /** Set when the AI Quote Assistant has overridden the rates above. */
   aiAdjusted: boolean;
   /** Short regional pricing note from the AI. Shown above the BoM. */
@@ -102,6 +111,9 @@ export const DEFAULT_QUOTE_SETTINGS: QuoteSettings = {
   preparedBy: "",
   clientName: "",
   projectLocation: "",
+  companyLogoDataUrl: "",
+  brandColor: "",
+  printFooter: "",
   aiAdjusted: false,
   regionalNotes: "",
   benchmark: "",
@@ -178,13 +190,24 @@ export function computeQuote(
   );
   const laborSubtotal = round2(laborHoursTotal * settings.laborRate);
 
-  // Cabling: per-camera + per-reader runs
+  // Cabling: prefer the auto-routed cable plan (real lengths × per-meter cost)
+  // when one is provided; otherwise fall back to the legacy flat per-device rates.
+  // Per-meter rate is derived from the existing `cablingPerCamera` setting
+  // assuming an average 12 m drop — keeps the user's pricing knob meaningful.
   const cameraCount = floor.devices.filter((d) => d.type === "camera").length;
   const readerCount = floor.devices.filter((d) => d.type === "reader").length;
-  const cablingSubtotal = round2(
-    cameraCount * settings.cablingPerCamera +
-      readerCount * settings.cablingPerReader
-  );
+  let cablingSubtotal: number;
+  if (settings.autoCabling?.totalLengthM && settings.autoCabling.totalLengthM > 0) {
+    const ratePerMeter = settings.cablingPerCamera / 12; // implied per-m rate
+    cablingSubtotal = round2(
+      settings.autoCabling.totalLengthM * ratePerMeter,
+    );
+  } else {
+    cablingSubtotal = round2(
+      cameraCount * settings.cablingPerCamera +
+        readerCount * settings.cablingPerReader,
+    );
+  }
 
   const extraLineItemsSubtotal = round2(
     (settings.extraLineItems ?? []).reduce(

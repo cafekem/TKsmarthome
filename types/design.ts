@@ -10,6 +10,27 @@ export type ReaderSubtype = "card" | "biometric" | "keypad" | "controller" | "lo
 export type SensorSubtype = "motion" | "glass-break" | "door-contact" | "smoke" | "heat" | "notification";
 export type NetworkSubtype = "switch" | "access-point" | "nvr";
 
+/**
+ * Install lifecycle stage for a device.
+ *  - "proposed":      planned but not yet installed (the default for new drops)
+ *  - "installed":     physically mounted and commissioned
+ *  - "decommissioned": removed/retired; kept on the plan for history
+ */
+export type InstallStatus = "proposed" | "installed" | "decommissioned";
+
+/**
+ * A photo captured during a site survey (or attached during desk design).
+ * `dataUrl` keeps everything client-side so the design file is self-contained.
+ */
+export interface DevicePhoto {
+  id: string;
+  /** base64 data URL — keeps the design self-contained and offline-friendly */
+  dataUrl: string;
+  caption?: string;
+  /** ISO timestamp when the photo was added */
+  takenAt: string;
+}
+
 export interface DeviceBase {
   id: string;
   catalogId?: string;
@@ -18,6 +39,16 @@ export interface DeviceBase {
   mountHeight: number;
   label: string;
   notes: string;
+  /** Lifecycle stage. Defaults to "proposed" on creation. */
+  installStatus: InstallStatus;
+  /** Site-walk + install photos attached to this device. */
+  photos: DevicePhoto[];
+  /** ISO date string (YYYY-MM-DD) when device warranty expires. */
+  warrantyUntil?: string;
+  /** ISO date string for the most recent inspection. */
+  lastInspectionAt?: string;
+  /** ISO date string for projected end-of-life / replacement. */
+  endOfLifeAt?: string;
 }
 
 /**
@@ -81,6 +112,33 @@ export interface Wall {
   height: number;
 }
 
+/**
+ * A door is a real-world opening on a wall segment. We model it as a position
+ * (snapped to a wall) plus a rotation (the wall's tangent direction), a width
+ * in meters, and a lock state.
+ *
+ * Readers can be linked to a door via `ReaderDevice.controlsDoorId` so the
+ * design tracks 'which reader controls which door' — the System Surveyor
+ * pattern.
+ */
+export interface Door {
+  id: string;
+  /** Position in floor-plan pixels, snapped to the wall it's mounted on. */
+  position: Vec2;
+  /** Rotation in radians — points along the wall the door is mounted on. */
+  rotation: number;
+  /** Door width in real-world meters. */
+  widthMeters: number;
+  /** Which wall this door sits on. */
+  wallId: string;
+  /** Whether the door is currently locked. */
+  locked: boolean;
+  /** Display label. */
+  label: string;
+  /** Free-form notes (hardware spec, fire rating, etc.). */
+  notes: string;
+}
+
 export interface Floor {
   id: string;
   name: string;
@@ -90,6 +148,8 @@ export interface Floor {
   ceilingHeight: number;
   walls: Wall[];
   devices: Device[];
+  /** Doors placed on walls. Readers can link to specific doors by id. */
+  doors: Door[];
   /** Optional preset path used by simulation mode. Floor-plan pixel coords. */
   simPath?: Vec2[];
 }
@@ -127,6 +187,12 @@ export interface DeviceDefaults {
   notes: string;
 }
 
+/** Defaults shared by every device kind — lifecycle, photos, dates. */
+const BASE_LIFECYCLE_DEFAULTS = {
+  installStatus: "proposed" as InstallStatus,
+  photos: [] as DevicePhoto[],
+};
+
 export const CAMERA_DEFAULTS: Omit<CameraDevice, "id" | "position"> = {
   type: "camera",
   cameraType: "dome",
@@ -139,6 +205,7 @@ export const CAMERA_DEFAULTS: Omit<CameraDevice, "id" | "position"> = {
   rotation: 0,
   mountHeight: 2.8,
   notes: "",
+  ...BASE_LIFECYCLE_DEFAULTS,
 };
 
 export const READER_DEFAULTS: Omit<ReaderDevice, "id" | "position"> = {
@@ -148,6 +215,7 @@ export const READER_DEFAULTS: Omit<ReaderDevice, "id" | "position"> = {
   rotation: 0,
   mountHeight: 1.2,
   notes: "",
+  ...BASE_LIFECYCLE_DEFAULTS,
 };
 
 export const SENSOR_DEFAULTS: Omit<SensorDevice, "id" | "position"> = {
@@ -158,6 +226,7 @@ export const SENSOR_DEFAULTS: Omit<SensorDevice, "id" | "position"> = {
   rotation: 0,
   mountHeight: 2.4,
   notes: "",
+  ...BASE_LIFECYCLE_DEFAULTS,
 };
 
 export const NETWORK_DEFAULTS: Omit<NetworkDeviceBase, "id" | "position"> = {
@@ -168,4 +237,5 @@ export const NETWORK_DEFAULTS: Omit<NetworkDeviceBase, "id" | "position"> = {
   rotation: 0,
   mountHeight: 2.6,
   notes: "",
+  ...BASE_LIFECYCLE_DEFAULTS,
 };

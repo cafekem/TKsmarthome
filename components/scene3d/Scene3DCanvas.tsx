@@ -46,6 +46,7 @@ export function Scene3DCanvas({
 }: Scene3DCanvasProps & { showSim?: boolean }) {
   const floor = useActiveFloor();
   const showCoverage = useDesignStore((s) => s.showCoverage);
+  const visibility = useDesignStore((s) => s.visibility);
   const threeDMode = useDesignStore((s) => s.threeDMode);
   const setThreeDMode = useDesignStore((s) => s.setThreeDMode);
   const addDevice = useDesignStore((s) => s.addDevice);
@@ -243,21 +244,27 @@ export function Scene3DCanvas({
           />
         ))}
 
-        {floor.devices.map((device) => (
-          <Device3D
-            key={device.id}
-            device={device}
-            scale={floor.scale}
-            showCoverage={showCoverage}
-            selected={selectedDeviceId === device.id}
-            editable={threeDMode === "orbit" && !showSim}
-            onSelect={() => selectDevice(device.id)}
-            onDragStateChange={(dragging) => setOrbitEnabled(!dragging)}
-            onMove={(positionPx) =>
-              updateDevice(floor.id, device.id, { position: positionPx })
-            }
-          />
-        ))}
+        {floor.devices
+          .filter(
+            (d) =>
+              visibility.byType[d.type] &&
+              visibility.byStatus[d.installStatus ?? "proposed"],
+          )
+          .map((device) => (
+            <Device3D
+              key={device.id}
+              device={device}
+              scale={floor.scale}
+              showCoverage={showCoverage}
+              selected={selectedDeviceId === device.id}
+              editable={threeDMode === "orbit" && !showSim}
+              onSelect={() => selectDevice(device.id)}
+              onDragStateChange={(dragging) => setOrbitEnabled(!dragging)}
+              onMove={(positionPx) =>
+                updateDevice(floor.id, device.id, { position: positionPx })
+              }
+            />
+          ))}
 
         {showSim && floor.simPath && floor.simPath.length >= 2 && (
           <SimulationOverlay

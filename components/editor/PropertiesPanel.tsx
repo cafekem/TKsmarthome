@@ -12,9 +12,18 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
-import type { CameraDevice, Device } from "@/types/design";
+import type {
+  CameraDevice,
+  Device,
+  DevicePhoto,
+  Door,
+  InstallStatus,
+} from "@/types/design";
 import { getProduct } from "@/lib/catalog";
 import { formatUSD } from "@/lib/pricing";
+import { DevicePhotoStrip } from "./DevicePhotoStrip";
+import { CameraDORIPanel } from "./CameraDORIPanel";
+import { cn } from "@/lib/utils";
 
 function pickValue(v: number | readonly number[]): number {
   return Array.isArray(v) ? v[0] : (v as number);
@@ -27,9 +36,16 @@ export function PropertiesPanel() {
   const updateDevice = useDesignStore((s) => s.updateDevice);
   const updateFloor = useDesignStore((s) => s.updateFloor);
   const removeDevice = useDesignStore((s) => s.removeDevice);
+  const updateDoor = useDesignStore((s) => s.updateDoor);
+  const removeDoor = useDesignStore((s) => s.removeDoor);
 
   const selected: Device | null =
     floor?.devices.find((d) => d.id === selectedId) ?? null;
+  // Doors share the `selectedDeviceId` slot so the canvas can highlight either
+  // entity uniformly. Look it up here when no device matched.
+  const selectedDoor: Door | null = selected
+    ? null
+    : (floor?.doors ?? []).find((d) => d.id === selectedId) ?? null;
 
   return (
     <aside className="flex h-full w-full flex-col border-l border-border/70 bg-sidebar">
@@ -44,13 +60,15 @@ export function PropertiesPanel() {
                   : selected.type === "sensor"
                     ? "Sensor"
                     : "Network device"
-              : floor
-                ? "Floor settings"
-                : "Properties"}
+              : selectedDoor
+                ? "Door"
+                : floor
+                  ? "Floor settings"
+                  : "Properties"}
           </div>
-          {selected && (
+          {(selected || selectedDoor) && (
             <div className="mt-0.5 text-[0.74rem] text-muted-foreground">
-              {selected.label || "Untitled"}
+              {(selected?.label || selectedDoor?.label) ?? "Untitled"}
             </div>
           )}
         </div>
@@ -70,6 +88,15 @@ export function PropertiesPanel() {
             aria-hidden="true"
           />
         )}
+        {selectedDoor && (
+          <div
+            className={cn(
+              "size-2 rounded-full",
+              selectedDoor.locked ? "bg-rose-500" : "bg-emerald-500",
+            )}
+            aria-hidden="true"
+          />
+        )}
       </div>
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-5">
@@ -80,6 +107,14 @@ export function PropertiesPanel() {
                 floor && updateDevice(floor.id, selected.id, partial)
               }
               onDelete={() => floor && removeDevice(floor.id, selected.id)}
+            />
+          ) : selectedDoor && floor ? (
+            <DoorForm
+              door={selectedDoor}
+              onChange={(partial) =>
+                updateDoor(floor.id, selectedDoor.id, partial)
+              }
+              onDelete={() => removeDoor(floor.id, selectedDoor.id)}
             />
           ) : floor && design ? (
             <FloorForm
@@ -238,6 +273,14 @@ function DeviceForm({
           placeholder="Anything to remember…"
         />
       </div>
+
+      <Separator />
+
+      <InstallStatusPicker device={device} onChange={onChange} />
+
+      <CriticalDatesFields device={device} onChange={onChange} />
+
+      <DevicePhotosSection device={device} />
 
       <Separator />
 
@@ -488,8 +531,302 @@ function CameraExtras({
           </div>
         </div>
       </div>
+
+      {/* DORI calculator — only shown for single-lens cameras at the moment */}
+      <CameraDORIPanel
+        fovDegrees={device.fovDegrees}
+        rangeMeters={device.rangeMeters}
+        resolution={device.resolution}
+      />
     </>
   );
 }
 
+/* ── Install status picker (segmented control) ─────────────────────────── */
+
+const STATUS_OPTIONS: { value: InstallStatus; label: string; tone: string }[] = [
+  { value: "proposed", label: "Proposed", tone: "bg-foreground/60" },
+  { value: "installed", label: "Installed", tone: "bg-emerald-500" },
+  { value: "decommissioned", label: "Retired", tone: "bg-rose-500" },
+];
+
+function InstallStatusPicker({
+  device,
+  onChange,
+}: {
+  device: Device;
+  onChange: (partial: Partial<Device>) => void;
+}) {
+  const current = device.installStatus ?? "proposed";
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">Install status</Label>
+      <div className="flex items-center gap-px rounded-md bg-foreground/[0.05] p-0.5">
+        {STATUS_OPTIONS.map(({ value, label, tone }) => {
+          const active = current === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() =>
+                onChange({ installStatus: value } as Partial<Device>)
+              }
+              className={cn(
+                "flex-1 inline-flex items-center justify-center gap-1.5 rounded px-2 py-1 text-[0.74rem] font-medium transition-colors",
+                active
+                  ? "bg-card text-foreground shadow-[0_1px_2px_-1px_rgba(0,0,0,0.18)]"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <span className={cn("size-1.5 rounded-full", tone)} aria-hidden />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Critical dates ────────────────────────────────────────────────────── */
+
+function CriticalDatesFields({
+  device,
+  onChange,
+}: {
+  device: Device;
+  onChange: (partial: Partial<Device>) => void;
+}) {
+  return (
+    <details className="group rounded-lg border border-border/60 bg-card/30">
+      <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-[0.78rem] font-medium text-foreground/85 transition-colors hover:bg-foreground/[0.03]">
+        <span>Critical dates</span>
+        <span className="text-[0.7rem] text-muted-foreground transition-transform group-open:rotate-180">
+          ▾
+        </span>
+      </summary>
+      <div className="grid grid-cols-1 gap-2.5 px-3 pb-3 pt-1">
+        <DateField
+          label="Warranty until"
+          value={device.warrantyUntil ?? ""}
+          onChange={(v) =>
+            onChange({ warrantyUntil: v || undefined } as Partial<Device>)
+          }
+        />
+        <DateField
+          label="Last inspection"
+          value={device.lastInspectionAt ?? ""}
+          onChange={(v) =>
+            onChange({ lastInspectionAt: v || undefined } as Partial<Device>)
+          }
+        />
+        <DateField
+          label="End of life"
+          value={device.endOfLifeAt ?? ""}
+          onChange={(v) =>
+            onChange({ endOfLifeAt: v || undefined } as Partial<Device>)
+          }
+        />
+      </div>
+    </details>
+  );
+}
+
+function DateField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <Label className="text-[0.74rem] text-muted-foreground">{label}</Label>
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-md border border-border bg-background/40 px-2 py-1 text-[0.78rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+      />
+    </div>
+  );
+}
+
+/* ── Photos attached to a device ───────────────────────────────────────── */
+
+function DevicePhotosSection({ device }: { device: Device }) {
+  const floor = useActiveFloor();
+  const addDevicePhoto = useDesignStore((s) => s.addDevicePhoto);
+  const removeDevicePhoto = useDesignStore((s) => s.removeDevicePhoto);
+  const updateDevice = useDesignStore((s) => s.updateDevice);
+  if (!floor) return null;
+  return (
+    <DevicePhotoStrip
+      photos={device.photos ?? []}
+      onAdd={(photo) => addDevicePhoto(floor.id, device.id, photo)}
+      onRemove={(photoId) => removeDevicePhoto(floor.id, device.id, photoId)}
+      onUpdateCaption={(photoId, caption) => {
+        const updatedPhotos: DevicePhoto[] = (device.photos ?? []).map((p) =>
+          p.id === photoId ? { ...p, caption } : p,
+        );
+        updateDevice(floor.id, device.id, {
+          photos: updatedPhotos,
+        } as Partial<Device>);
+      }}
+    />
+  );
+}
+
 const LENS_COLORS = ["#3b82f6", "#06b6d4", "#f97316", "#e879f9", "#facc15", "#10b981"];
+
+/* ── Door form ─────────────────────────────────────────────────────────
+   Properties for a placed door: width, lock state, label, notes, and the
+   reader it's controlled by. */
+function DoorForm({
+  door,
+  onChange,
+  onDelete,
+}: {
+  door: Door;
+  onChange: (partial: Partial<Door>) => void;
+  onDelete: () => void;
+}) {
+  const floor = useActiveFloor();
+  const updateDeviceFn = useDesignStore((s) => s.updateDevice);
+  const readers = (floor?.devices ?? []).filter((d) => d.type === "reader");
+  const controllingReader = readers.find(
+    (r) => r.type === "reader" && r.controlsDoorId === door.id,
+  );
+
+  function setControllingReader(readerId: string | null) {
+    if (!floor) return;
+    // Clear any existing reader that controls this door
+    for (const r of readers) {
+      if (
+        r.type === "reader" &&
+        r.controlsDoorId === door.id &&
+        r.id !== readerId
+      ) {
+        updateDeviceFn(floor.id, r.id, { controlsDoorId: undefined });
+      }
+    }
+    if (readerId) {
+      updateDeviceFn(floor.id, readerId, { controlsDoorId: door.id });
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Label</Label>
+        <Input
+          value={door.label}
+          onChange={(e) => onChange({ label: e.target.value })}
+          placeholder="e.g. Front entry"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">
+          Lock state
+        </Label>
+        <div className="flex items-center gap-px rounded-md bg-foreground/[0.05] p-0.5">
+          <button
+            type="button"
+            onClick={() => onChange({ locked: false })}
+            className={cn(
+              "flex-1 inline-flex items-center justify-center gap-1.5 rounded px-2 py-1 text-[0.74rem] font-medium transition-colors",
+              !door.locked
+                ? "bg-card text-foreground shadow-[0_1px_2px_-1px_rgba(0,0,0,0.18)]"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className="size-1.5 rounded-full bg-emerald-500" />
+            Unlocked
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ locked: true })}
+            className={cn(
+              "flex-1 inline-flex items-center justify-center gap-1.5 rounded px-2 py-1 text-[0.74rem] font-medium transition-colors",
+              door.locked
+                ? "bg-card text-foreground shadow-[0_1px_2px_-1px_rgba(0,0,0,0.18)]"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className="size-1.5 rounded-full bg-rose-500" />
+            Locked
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">
+          Width (m)
+        </Label>
+        <div className="flex items-center gap-3">
+          <Slider
+            min={0.6}
+            max={2.4}
+            step={0.05}
+            value={[door.widthMeters]}
+            onValueChange={(v) => onChange({ widthMeters: pickValue(v) })}
+            className="flex-1"
+          />
+          <div className="font-mono text-sm w-12 text-right">
+            {door.widthMeters.toFixed(2)}
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">
+          Controlled by reader
+        </Label>
+        <select
+          value={controllingReader?.id ?? ""}
+          onChange={(e) =>
+            setControllingReader(e.target.value ? e.target.value : null)
+          }
+          className="w-full rounded-md border border-border bg-background/40 px-2 py-1.5 text-[0.85rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+        >
+          <option value="">— None —</option>
+          {readers.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.label || `Reader ${r.id.slice(-4)}`}
+            </option>
+          ))}
+        </select>
+        {readers.length === 0 && (
+          <div className="text-[0.7rem] text-muted-foreground/70">
+            Drop a card or biometric reader onto the canvas to link it here.
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Notes</Label>
+        <Input
+          value={door.notes}
+          onChange={(e) => onChange({ notes: e.target.value })}
+          placeholder="Anything to remember…"
+        />
+      </div>
+
+      <Separator />
+
+      <Button
+        variant="outline"
+        className="w-full text-destructive hover:text-destructive"
+        onClick={onDelete}
+      >
+        <Trash2 className="size-4" />
+        Remove door
+      </Button>
+    </div>
+  );
+}
