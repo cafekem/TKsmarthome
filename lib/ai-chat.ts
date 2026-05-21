@@ -34,6 +34,7 @@ export type ChatOperation =
       fovDegrees?: number;
       mountHeightM?: number;
       notes?: string;
+      model?: string;
     }
   | { kind: "move-device"; deviceId: string; newX: number; newY: number }
   | { kind: "rotate-device"; deviceId: string; newRotationDegrees: number }
@@ -390,6 +391,12 @@ export function applyChatOperation(floorId: string, op: ChatOperation): boolean 
           (
             partial as Partial<Extract<Device, { type: "camera" }>>
           ).rangeMeters = op.rangeMeters;
+        }
+        // Optional brand + model — set when Claude synthesized this from
+        // a user-named product not in our catalog. Shows in the BoM.
+        if (op.model) {
+          (partial as Partial<Extract<Device, { type: "camera" }>>).model =
+            op.model;
         }
       } else if (op.deviceType === "sensor" && op.rangeMeters != null) {
         (

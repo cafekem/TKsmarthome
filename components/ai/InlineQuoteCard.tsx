@@ -50,9 +50,10 @@ export function InlineQuoteCard({ onOpenFullQuote }: { onOpenFullQuote: () => vo
 
   if (!floor || !breakdown) return null;
 
-  // When there are no priced devices yet, the inline card is noisy. Hide
-  // it until the user (or the AI) has placed something.
-  if (breakdown.rows.length === 0 && breakdown.grandTotal === 0) return null;
+  // Hide the card until the user has placed at least one device. Before
+  // that, the "grand total" is just commissioning + tax-on-commissioning
+  // (~$900) which is confusing — there's no project to price yet.
+  if (breakdown.rows.length === 0) return null;
 
   const deviceCount = breakdown.rows.reduce((sum, r) => sum + r.quantity, 0);
 

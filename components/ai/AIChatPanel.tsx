@@ -485,14 +485,27 @@ function EmptyState({
   onOpenSurvey: () => void;
   onOpenAdvisor: () => void;
 }) {
-  const suggestions = [
+  // Three hero starters that span the agent's range: audit, research,
+  // suggestion. Specific enough to be useful, generic enough to not look
+  // like the only thing the chat can do.
+  const starters = [
     {
-      icon: <Camera className="size-3.5" strokeWidth={1.8} />,
-      text: "Add a dome camera at every corner of the largest room.",
+      icon: <Wand2 className="size-3.5 text-amber-500" strokeWidth={1.8} />,
+      text: "Critique my current layout — what's missing?",
     },
     {
       icon: <Globe className="size-3.5 text-sky-500" strokeWidth={1.8} />,
       text: "Find a 4K dome camera under $300 and add 4 of them.",
+    },
+    {
+      icon: <Lightbulb className="size-3.5 text-violet-500" strokeWidth={1.8} />,
+      text: "Suggest where I should put cameras in the conference room.",
+    },
+  ];
+  const moreIdeas = [
+    {
+      icon: <Camera className="size-3.5" strokeWidth={1.8} />,
+      text: "Add a dome camera at every corner of the largest room.",
     },
     {
       icon: <MousePointer2 className="size-3.5 text-indigo-500" strokeWidth={1.8} />,
@@ -511,18 +524,11 @@ function EmptyState({
       text: "Cover every door with a motion sensor.",
     },
     {
-      icon: <Wand2 className="size-3.5 text-amber-500" strokeWidth={1.8} />,
-      text: "Critique my current layout — what's missing?",
-    },
-    {
-      icon: <Lightbulb className="size-3.5 text-violet-500" strokeWidth={1.8} />,
-      text: "Suggest where I should put cameras in the conference room.",
-    },
-    {
       icon: <Eye className="size-3.5 text-rose-500" strokeWidth={1.8} />,
       text: "Show me the POV of the front-door camera.",
     },
   ];
+  const [moreOpen, setMoreOpen] = useState(false);
   return (
     <div className="flex flex-col items-center gap-4 pt-4 px-1 text-center">
       <div className="relative">
@@ -541,18 +547,38 @@ function EmptyState({
         </div>
       </div>
       <div className="grid w-full gap-1.5">
-        {suggestions.map((s, i) => (
-          <button
+        {starters.map((s, i) => (
+          <SuggestionChip
             key={i}
-            type="button"
-            onClick={() => onPick(s.text)}
-            className="flex items-start gap-2 rounded-lg border border-border/60 bg-card/60 px-2.5 py-1.5 text-left text-[0.74rem] text-foreground/85 hover:border-primary/40 hover:bg-primary/[0.04] transition-colors"
-          >
-            <span className="mt-0.5 text-primary/80">{s.icon}</span>
-            <span>{s.text}</span>
-          </button>
+            icon={s.icon}
+            text={s.text}
+            onPick={onPick}
+          />
         ))}
       </div>
+
+      <button
+        type="button"
+        onClick={() => setMoreOpen((v) => !v)}
+        className="-mt-1 inline-flex items-center gap-1 text-[0.7rem] font-medium text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {moreOpen ? "Hide ideas" : "More ideas"}
+        <span className="opacity-60">{moreOpen ? "▴" : "▾"}</span>
+      </button>
+
+      {moreOpen && (
+        <div className="grid w-full gap-1.5">
+          {moreIdeas.map((s, i) => (
+            <SuggestionChip
+              key={i}
+              icon={s.icon}
+              text={s.text}
+              onPick={onPick}
+            />
+          ))}
+        </div>
+      )}
+
       <div className="mt-1 grid w-full grid-cols-2 gap-1.5 border-t border-border/40 pt-3">
         <button
           type="button"
@@ -574,6 +600,27 @@ function EmptyState({
         </button>
       </div>
     </div>
+  );
+}
+
+function SuggestionChip({
+  icon,
+  text,
+  onPick,
+}: {
+  icon: React.ReactNode;
+  text: string;
+  onPick: (text: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(text)}
+      className="flex items-start gap-2 rounded-lg border border-border/60 bg-card/60 px-2.5 py-1.5 text-left text-[0.74rem] text-foreground/85 hover:border-primary/40 hover:bg-primary/[0.04] transition-colors"
+    >
+      <span className="mt-0.5 text-primary/80">{icon}</span>
+      <span>{text}</span>
+    </button>
   );
 }
 

@@ -106,6 +106,10 @@ export type ChatOperation =
       fovDegrees?: number;
       mountHeightM?: number;
       notes?: string;
+      /** Optional brand + model designation, e.g. "Lorex N863A3" — set
+          when the user references a specific product not in the
+          built-in catalog. Shown in the BoM. */
+      model?: string;
     }
   | { kind: "move-device"; deviceId: string; newX: number; newY: number }
   | { kind: "rotate-device"; deviceId: string; newRotationDegrees: number }
@@ -194,6 +198,11 @@ const DOMAIN_TOOLS: Anthropic.Messages.Tool[] = [
         fovDegrees: { type: "number" },
         mountHeightM: { type: "number" },
         notes: { type: "string" },
+        model: {
+          type: "string",
+          description:
+            "Brand + model, e.g. 'Lorex N863A3' or 'Reolink RLC-810A'. Set this when the user references a specific product not in the built-in catalog. Shows up in the bill of materials.",
+        },
       },
       required: ["type", "x", "y", "rotationDegrees", "label"],
     },
@@ -462,6 +471,31 @@ Verkada cameras with an on-prem Axis recorder when both would normally
 need their own management plane. Flag these as add_annotation kind=
 "warning" with a one-sentence rationale. Don't refuse — recommend a
 compatible alternative or a bridging product (web_search if needed).
+
+UNKNOWN-PRODUCT FLOW: when the user names a specific product NOT in
+your catalog ("add a Lorex N863A3", "use the Hikvision DS-2CD2387G2"),
+DO NOT refuse. Build it on the fly:
+  1. web_search "<brand> <model> spec sheet price" to find the type
+     (dome/bullet/PTZ/fisheye/reader/sensor/NVR/switch/AP), FOV,
+     range, mount height, and current street price.
+  2. Call add_device with:
+       • type    — closest match (camera | reader | sensor | network)
+       • subtype — closest 3D mesh shape (dome | bullet | ptz | fisheye
+                   | multi-sensor | card | biometric | keypad | motion
+                   | glass-break | door-contact | smoke | nvr | switch
+                   | access-point)
+       • label   — "<Brand> <Model>"  ← shown on the canvas + quote
+       • model   — same "<Brand> <Model>" string  ← shows in BoM
+       • fovDegrees, rangeMeters, mountHeightM — pulled from your
+         research, or sensible defaults if unclear
+       • notes   — one-line summary + price URL
+  3. Add the device's price to the quote via add_quote_line_item
+     (category: "materials", quantity: <copies>, description:
+     "<Brand> <Model> hardware") so the user's BoM total tracks it.
+  4. Cite the spec/price source.
+The 3D representation reuses the subtype's built-in mesh (dome shape,
+bullet shape, etc.) — the label tells the user it's the specific
+product. This is what "synthesizing a replica" means in practice.
 
 VIEW (UI navigation):
   view_from_camera        flip the 3D scene into first-person POV from a
@@ -885,6 +919,7 @@ function toolUseToOperation(
             ? input.mountHeightM
             : undefined,
         notes: typeof input.notes === "string" ? input.notes : undefined,
+        model: typeof input.model === "string" ? input.model : undefined,
       };
     }
     case "move_device": {
