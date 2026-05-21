@@ -236,6 +236,7 @@ export function buildDemoFloor(): Omit<Floor, "id" | "index"> {
     walls,
     devices: demoDevices(),
     doors: demoDoors(walls),
+    annotations: [],
     simPath: demoSimPath(),
   };
 }

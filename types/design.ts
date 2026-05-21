@@ -148,6 +148,23 @@ export interface Door {
   notes: string;
 }
 
+/**
+ * Pinned annotation on the floor plan — a sticky note the AI (or user) can
+ * drop at any point to flag a concern, note an idea, or warn about a
+ * constraint. Renders as a small floating marker on the 2D canvas.
+ */
+export type AnnotationKind = "note" | "warning" | "idea";
+
+export interface Annotation {
+  id: string;
+  position: Vec2;
+  text: string;
+  kind: AnnotationKind;
+  /** Who created this. "ai" annotations get a small sparkle indicator. */
+  author: "user" | "ai";
+  createdAt: string;
+}
+
 export interface Floor {
   id: string;
   name: string;
@@ -159,6 +176,8 @@ export interface Floor {
   devices: Device[];
   /** Doors placed on walls. Readers can link to specific doors by id. */
   doors: Door[];
+  /** Sticky-note annotations the AI or user can drop at any point. */
+  annotations: Annotation[];
   /** Optional preset path used by simulation mode. Floor-plan pixel coords. */
   simPath?: Vec2[];
 }

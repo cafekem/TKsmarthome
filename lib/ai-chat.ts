@@ -1,5 +1,6 @@
 import type { Device, Floor } from "@/types/design";
 import { useDesignStore } from "@/lib/store";
+import type { ExtraLineItem } from "@/lib/pricing";
 
 /** One message in the chat panel. */
 export interface ChatMessage {
@@ -58,7 +59,40 @@ export type ChatOperation =
       locked: boolean;
       label: string;
     }
-  | { kind: "set-floor-scale"; scalePxPerMeter: number };
+  | { kind: "set-floor-scale"; scalePxPerMeter: number }
+  | {
+      kind: "add-annotation";
+      x: number;
+      y: number;
+      text: string;
+      annotationKind: "note" | "warning" | "idea";
+    }
+  | { kind: "remove-annotation"; annotationId: string }
+  | {
+      kind: "add-quote-line-item";
+      description: string;
+      quantity: number;
+      unitCost: number;
+      category: "labor" | "materials" | "permits" | "logistics" | "other";
+    }
+  | { kind: "remove-quote-line-item"; index: number }
+  | {
+      kind: "update-quote-settings";
+      laborRate?: number;
+      cablingPerCamera?: number;
+      cablingPerReader?: number;
+      commissioningFee?: number;
+      markupPct?: number;
+      taxPct?: number;
+      clientName?: string;
+      projectLocation?: string;
+      preparedBy?: string;
+      brandColor?: string;
+      printFooter?: string;
+      regionalNotes?: string;
+      benchmark?: string;
+      narrative?: string;
+    };
 
 /** Streaming callbacks the UI subscribes to. */
 export interface ChatStreamHandlers {
@@ -127,6 +161,14 @@ function summarizeFloorForChat(floor: Floor) {
       locked: d.locked,
       label: d.label,
     })),
+    annotations: (floor.annotations ?? []).map((a) => ({
+      id: a.id,
+      x: a.position.x,
+      y: a.position.y,
+      text: a.text,
+      kind: a.kind,
+      author: a.author,
+    })),
   };
 }
 
@@ -146,13 +188,33 @@ export async function streamAIChat(args: {
   handlers: ChatStreamHandlers;
   signal?: AbortSignal;
 }): Promise<void> {
+  // Include the current quote shape so Claude can reason about line items,
+  // labor rates, client name, etc. without a separate query.
+  const store = useDesignStore.getState();
+  const q = store.quoteSettings;
+  const floorWithQuote = {
+    ...summarizeFloorForChat(args.floor),
+    quote: {
+      clientName: q.clientName,
+      projectLocation: q.projectLocation,
+      laborRate: q.laborRate,
+      markupPct: q.markupPct,
+      taxPct: q.taxPct,
+      extraLineItems: (q.extraLineItems ?? []).map((li) => ({
+        description: li.description,
+        quantity: li.quantity,
+        unitCost: li.unitCost,
+        category: li.category,
+      })),
+    },
+  };
   const res = await fetch("/api/ai/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       designName: args.designName,
       buildingType: args.buildingType,
-      floor: summarizeFloorForChat(args.floor),
+      floor: floorWithQuote,
       messages: args.messages,
     }),
     signal: args.signal,
@@ -377,6 +439,49 @@ export function applyChatOperation(floorId: string, op: ChatOperation): boolean 
       store.updateFloor(floorId, { scale: op.scalePxPerMeter });
       return true;
     }
+    if (op.kind === "add-annotation") {
+      store.addAnnotation(floorId, {
+        position: { x: op.x, y: op.y },
+        text: op.text,
+        kind: op.annotationKind,
+        author: "ai",
+      });
+      return true;
+    }
+    if (op.kind === "remove-annotation") {
+      store.removeAnnotation(floorId, op.annotationId);
+      return true;
+    }
+    if (op.kind === "add-quote-line-item") {
+      const li: ExtraLineItem = {
+        description: op.description,
+        quantity: op.quantity,
+        unitCost: op.unitCost,
+        category: op.category,
+      };
+      store.updateQuoteSettings({
+        extraLineItems: [...(store.quoteSettings.extraLineItems ?? []), li],
+      });
+      return true;
+    }
+    if (op.kind === "remove-quote-line-item") {
+      const items = store.quoteSettings.extraLineItems ?? [];
+      if (op.index < 0 || op.index >= items.length) return false;
+      const next = items.filter((_, i) => i !== op.index);
+      store.updateQuoteSettings({ extraLineItems: next });
+      return true;
+    }
+    if (op.kind === "update-quote-settings") {
+      const partial: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(op)) {
+        if (k !== "kind" && v !== undefined) partial[k] = v;
+      }
+      // Type-cast: the runtime shape matches Partial<QuoteSettings>.
+      store.updateQuoteSettings(
+        partial as unknown as Partial<typeof store.quoteSettings>,
+      );
+      return true;
+    }
   } catch {
     /* skip individual op failures */
   }
@@ -414,6 +519,27 @@ export function describeOperation(op: ChatOperation): string {
       return `+ door "${op.label}"`;
     case "set-floor-scale":
       return `↻ scale → ${op.scalePxPerMeter.toFixed(0)} px/m`;
+    case "add-annotation":
+      return `${op.annotationKind} "${op.text.length > 40 ? op.text.slice(0, 40) + "…" : op.text}"`;
+    case "remove-annotation":
+      return `× note ${op.annotationId}`;
+    case "add-quote-line-item":
+      return `+ quote: ${op.description} (${op.quantity} × $${op.unitCost})`;
+    case "remove-quote-line-item":
+      return `× quote line #${op.index + 1}`;
+    case "update-quote-settings": {
+      const bits: string[] = [];
+      if (op.clientName) bits.push(`client "${op.clientName}"`);
+      if (op.projectLocation) bits.push(`location "${op.projectLocation}"`);
+      if (op.laborRate != null) bits.push(`labor $${op.laborRate}/hr`);
+      if (op.markupPct != null) bits.push(`markup ${op.markupPct}%`);
+      if (op.taxPct != null) bits.push(`tax ${op.taxPct}%`);
+      if (op.brandColor) bits.push(`brand ${op.brandColor}`);
+      if (op.regionalNotes) bits.push(`regional notes`);
+      if (op.benchmark) bits.push(`benchmark`);
+      if (op.narrative) bits.push(`narrative`);
+      return `↻ quote: ${bits.join(", ") || "settings"}`;
+    }
   }
 }
 

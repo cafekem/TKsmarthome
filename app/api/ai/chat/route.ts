@@ -46,6 +46,27 @@ interface FloorSnapshot {
     installStatus: "proposed" | "installed" | "decommissioned";
   }[];
   doors: { id: string; x: number; y: number; widthMeters: number; locked: boolean; label: string }[];
+  annotations: {
+    id: string;
+    x: number;
+    y: number;
+    text: string;
+    kind: "note" | "warning" | "idea";
+    author: "user" | "ai";
+  }[];
+  quote?: {
+    clientName: string;
+    projectLocation: string;
+    laborRate: number;
+    markupPct: number;
+    taxPct: number;
+    extraLineItems: {
+      description: string;
+      quantity: number;
+      unitCost: number;
+      category: string;
+    }[];
+  };
 }
 
 interface ChatMessage {
@@ -99,7 +120,40 @@ export type ChatOperation =
       locked: boolean;
       label: string;
     }
-  | { kind: "set-floor-scale"; scalePxPerMeter: number };
+  | { kind: "set-floor-scale"; scalePxPerMeter: number }
+  | {
+      kind: "add-annotation";
+      x: number;
+      y: number;
+      text: string;
+      annotationKind: "note" | "warning" | "idea";
+    }
+  | { kind: "remove-annotation"; annotationId: string }
+  | {
+      kind: "add-quote-line-item";
+      description: string;
+      quantity: number;
+      unitCost: number;
+      category: "labor" | "materials" | "permits" | "logistics" | "other";
+    }
+  | { kind: "remove-quote-line-item"; index: number }
+  | {
+      kind: "update-quote-settings";
+      laborRate?: number;
+      cablingPerCamera?: number;
+      cablingPerReader?: number;
+      commissioningFee?: number;
+      markupPct?: number;
+      taxPct?: number;
+      clientName?: string;
+      projectLocation?: string;
+      preparedBy?: string;
+      brandColor?: string;
+      printFooter?: string;
+      regionalNotes?: string;
+      benchmark?: string;
+      narrative?: string;
+    };
 
 const DOMAIN_TOOLS: Anthropic.Messages.Tool[] = [
   {
@@ -238,6 +292,89 @@ const DOMAIN_TOOLS: Anthropic.Messages.Tool[] = [
       required: ["pixelsPerMeter"],
     },
   },
+  {
+    name: "add_annotation",
+    description:
+      "Pin a sticky-note style annotation on the floor plan at (x, y). Use this to flag concerns, suggest improvements without acting, leave reminders, or call out compliance issues. Annotations appear on the canvas as floating markers.",
+    input_schema: {
+      type: "object",
+      properties: {
+        x: { type: "number" },
+        y: { type: "number" },
+        text: {
+          type: "string",
+          description: "1–2 sentence note. Keep it short — sticky-note length.",
+        },
+        annotationKind: {
+          type: "string",
+          enum: ["note", "warning", "idea"],
+          description:
+            "note = neutral observation, warning = something the user should fix, idea = a suggestion.",
+        },
+      },
+      required: ["x", "y", "text", "annotationKind"],
+    },
+  },
+  {
+    name: "remove_annotation",
+    description: "Delete an annotation by id.",
+    input_schema: {
+      type: "object",
+      properties: { annotationId: { type: "string" } },
+      required: ["annotationId"],
+    },
+  },
+  {
+    name: "add_quote_line_item",
+    description:
+      "Add a custom line item to the project quote — permits, lift rental, custom labor, etc. Use after web_search if you looked up regional pricing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        description: { type: "string" },
+        quantity: { type: "number" },
+        unitCost: { type: "number" },
+        category: {
+          type: "string",
+          enum: ["labor", "materials", "permits", "logistics", "other"],
+        },
+      },
+      required: ["description", "quantity", "unitCost", "category"],
+    },
+  },
+  {
+    name: "remove_quote_line_item",
+    description: "Remove an extra quote line item by its zero-based index.",
+    input_schema: {
+      type: "object",
+      properties: { index: { type: "number" } },
+      required: ["index"],
+    },
+  },
+  {
+    name: "update_quote_settings",
+    description:
+      "Update one or more fields on the project quote: rates (laborRate, cablingPerCamera, cablingPerReader, commissioningFee, markupPct, taxPct), metadata (clientName, projectLocation, preparedBy, brandColor, printFooter), or narrative (regionalNotes, benchmark, narrative). Only include fields you actually want to change.",
+    input_schema: {
+      type: "object",
+      properties: {
+        laborRate: { type: "number" },
+        cablingPerCamera: { type: "number" },
+        cablingPerReader: { type: "number" },
+        commissioningFee: { type: "number" },
+        markupPct: { type: "number" },
+        taxPct: { type: "number" },
+        clientName: { type: "string" },
+        projectLocation: { type: "string" },
+        preparedBy: { type: "string" },
+        brandColor: { type: "string", description: "Hex color, e.g. #2563eb" },
+        printFooter: { type: "string" },
+        regionalNotes: { type: "string" },
+        benchmark: { type: "string" },
+        narrative: { type: "string" },
+      },
+    },
+  },
 ];
 
 /**
@@ -259,21 +396,37 @@ You are an AGENTIC editor. Plan, act, and verify across multiple tool calls in a
 ═══ TOOLS ═══
 
 DESIGN EDITS (apply to the floor immediately, client-side):
-  add_device          add a camera / reader / sensor / network device
-  move_device         relocate a device by id
-  rotate_device       change a device's rotation
-  remove_device       delete a device
-  update_device       change label / range / FOV / mount / status / notes
-  add_wall            draw a wall segment
-  remove_wall         delete a wall by id
-  add_door            add a door on a wall by id
-  set_floor_scale     recalibrate pixels-per-meter
+  add_device              add a camera / reader / sensor / network device
+  move_device             relocate a device by id
+  rotate_device           change a device's rotation
+  remove_device           delete a device
+  update_device           change label / range / FOV / mount / status / notes
+  add_wall                draw a wall segment
+  remove_wall             delete a wall by id
+  add_door                add a door on a wall by id
+  set_floor_scale         recalibrate pixels-per-meter
+
+ANNOTATIONS (sticky notes pinned on the canvas — visible to user):
+  add_annotation          pin a "note" / "warning" / "idea" at (x, y) on the
+                          floor plan. Use this to call out concerns, flag
+                          compliance issues, or suggest improvements WITHOUT
+                          actually editing the design. Great for things you
+                          want the user to decide on.
+  remove_annotation       delete an annotation by id
+
+QUOTE (shape the project quote — bill of materials, rates, line items):
+  add_quote_line_item     add a custom line item (permits, lift rental, etc.)
+  remove_quote_line_item  remove a line item by index
+  update_quote_settings   change rates, client info, brand color, regional
+                          notes, narrative, etc.
 
 RESEARCH (server-side; results stream back as citations):
-  web_search          search the web — use this when the user asks for specific
-                      product pricing, current code requirements, regional
-                      regulations, manufacturer specs, or anything you don't
-                      already know with confidence. Always cite sources.
+  web_search              search the web — use this when the user asks for
+                          specific product pricing, current code requirements,
+                          regional regulations, manufacturer specs, or
+                          anything you don't know with confidence. ALSO use
+                          it before adding quote line items so prices are
+                          backed by real sources. Always cite.
 
 ═══ COORDINATES ═══
 
@@ -577,6 +730,35 @@ function formatFloorContext(body: ChatRequestBody): string {
       );
     }
   }
+  if (floor.annotations && floor.annotations.length > 0) {
+    lines.push("");
+    lines.push(`Annotations (${floor.annotations.length}):`);
+    for (const a of floor.annotations) {
+      lines.push(
+        `  [${a.id}] ${a.kind} @ (${a.x.toFixed(0)},${a.y.toFixed(0)}) — "${a.text}" (${a.author})`,
+      );
+    }
+  }
+
+  if (floor.quote) {
+    lines.push("");
+    lines.push("Quote:");
+    lines.push(`  Client: ${floor.quote.clientName || "(unset)"}`);
+    lines.push(`  Location: ${floor.quote.projectLocation || "(unset)"}`);
+    lines.push(
+      `  Labor $${floor.quote.laborRate}/hr · markup ${floor.quote.markupPct}% · tax ${floor.quote.taxPct}%`,
+    );
+    if (floor.quote.extraLineItems.length > 0) {
+      lines.push(`  Extra line items (${floor.quote.extraLineItems.length}):`);
+      floor.quote.extraLineItems.forEach((li, i) => {
+        lines.push(
+          `    [${i}] ${li.category}: "${li.description}" × ${li.quantity} @ $${li.unitCost}`,
+        );
+      });
+    } else {
+      lines.push("  Extra line items: (none)");
+    }
+  }
   lines.push("===========================");
   return lines.join("\n");
 }
@@ -692,6 +874,95 @@ function toolUseToOperation(
       const ppm = Number(input.pixelsPerMeter);
       if (!Number.isFinite(ppm) || ppm < 5 || ppm > 600) return null;
       return { kind: "set-floor-scale", scalePxPerMeter: ppm };
+    }
+    case "add_annotation": {
+      const kind = input.annotationKind as "note" | "warning" | "idea";
+      if (!["note", "warning", "idea"].includes(kind)) return null;
+      const text =
+        typeof input.text === "string" && input.text.trim()
+          ? input.text.trim()
+          : "";
+      if (!text) return null;
+      return {
+        kind: "add-annotation",
+        x: Number(input.x) || 0,
+        y: Number(input.y) || 0,
+        text,
+        annotationKind: kind,
+      };
+    }
+    case "remove_annotation": {
+      const annotationId =
+        typeof input.annotationId === "string" ? input.annotationId : "";
+      if (!annotationId) return null;
+      return { kind: "remove-annotation", annotationId };
+    }
+    case "add_quote_line_item": {
+      const category = input.category as
+        | "labor"
+        | "materials"
+        | "permits"
+        | "logistics"
+        | "other";
+      if (
+        !["labor", "materials", "permits", "logistics", "other"].includes(
+          category,
+        )
+      )
+        return null;
+      const description =
+        typeof input.description === "string" ? input.description.trim() : "";
+      if (!description) return null;
+      const quantity = Number(input.quantity);
+      const unitCost = Number(input.unitCost);
+      if (!Number.isFinite(quantity) || quantity <= 0) return null;
+      if (!Number.isFinite(unitCost) || unitCost < 0) return null;
+      return {
+        kind: "add-quote-line-item",
+        description,
+        quantity,
+        unitCost,
+        category,
+      };
+    }
+    case "remove_quote_line_item": {
+      const index = Number(input.index);
+      if (!Number.isInteger(index) || index < 0) return null;
+      return { kind: "remove-quote-line-item", index };
+    }
+    case "update_quote_settings": {
+      const op: ChatOperation = { kind: "update-quote-settings" };
+      const numericFields = [
+        "laborRate",
+        "cablingPerCamera",
+        "cablingPerReader",
+        "commissioningFee",
+        "markupPct",
+        "taxPct",
+      ] as const;
+      for (const k of numericFields) {
+        if (typeof input[k] === "number") {
+          (op as Record<string, unknown>)[k] = input[k];
+        }
+      }
+      const stringFields = [
+        "clientName",
+        "projectLocation",
+        "preparedBy",
+        "brandColor",
+        "printFooter",
+        "regionalNotes",
+        "benchmark",
+        "narrative",
+      ] as const;
+      for (const k of stringFields) {
+        if (typeof input[k] === "string") {
+          (op as Record<string, unknown>)[k] = input[k];
+        }
+      }
+      // No-op if nothing was set.
+      if (Object.keys(op).length === 1) return null;
+      return op;
     }
     default:
       return null;

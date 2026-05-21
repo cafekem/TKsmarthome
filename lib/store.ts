@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { temporal } from "zundo";
 import type {
+  Annotation,
   DesignDocument,
   Device,
   DevicePhoto,
@@ -45,6 +46,7 @@ function createDefaultFloor(): Floor {
     walls: [],
     devices: [],
     doors: [],
+    annotations: [],
   };
 }
 
@@ -108,7 +110,18 @@ interface DesignState {
     x: number;
     y: number;
     label: string;
-    tone: "add" | "move" | "remove" | "edit" | "search";
+    tone:
+      | "add"
+      | "move"
+      | "remove"
+      | "edit"
+      | "search"
+      | "rotate"
+      | "annotate"
+      | "wall"
+      | "door"
+      | "quote"
+      | "calibrate";
     nonce: number;
   } | null;
 
@@ -132,7 +145,18 @@ interface DesignState {
     x: number;
     y: number;
     label: string;
-    tone: "add" | "move" | "remove" | "edit" | "search";
+    tone:
+      | "add"
+      | "move"
+      | "remove"
+      | "edit"
+      | "search"
+      | "rotate"
+      | "annotate"
+      | "wall"
+      | "door"
+      | "quote"
+      | "calibrate";
   }): void;
   clearAICursor(): void;
   toggleDeviceTypeVisible(type: DeviceType): void;
@@ -157,6 +181,17 @@ interface DesignState {
   addDoor(floorId: string, door: Omit<Door, "id">): Door;
   updateDoor(floorId: string, doorId: string, partial: Partial<Door>): void;
   removeDoor(floorId: string, doorId: string): void;
+
+  addAnnotation(
+    floorId: string,
+    annotation: Omit<Annotation, "id" | "createdAt">,
+  ): Annotation;
+  updateAnnotation(
+    floorId: string,
+    annotationId: string,
+    partial: Partial<Annotation>,
+  ): void;
+  removeAnnotation(floorId: string, annotationId: string): void;
 
   loadDemo(): void;
 }
@@ -667,6 +702,94 @@ export const useDesignStore = create<DesignState>()(
           });
         },
 
+        addAnnotation(floorId, annotation) {
+          const newAnno: Annotation = {
+            ...annotation,
+            id: uid("anno"),
+            createdAt: nowISO(),
+          };
+          set((state) => {
+            const id = state.currentDesignId;
+            if (!id) return state;
+            const design = state.designs[id];
+            if (!design) return state;
+            return {
+              designs: {
+                ...state.designs,
+                [id]: {
+                  ...design,
+                  floors: design.floors.map((f) =>
+                    f.id === floorId
+                      ? {
+                          ...f,
+                          annotations: [...(f.annotations ?? []), newAnno],
+                        }
+                      : f,
+                  ),
+                  updatedAt: nowISO(),
+                },
+              },
+            };
+          });
+          return newAnno;
+        },
+
+        updateAnnotation(floorId, annotationId, partial) {
+          set((state) => {
+            const id = state.currentDesignId;
+            if (!id) return state;
+            const design = state.designs[id];
+            if (!design) return state;
+            return {
+              designs: {
+                ...state.designs,
+                [id]: {
+                  ...design,
+                  floors: design.floors.map((f) =>
+                    f.id === floorId
+                      ? {
+                          ...f,
+                          annotations: (f.annotations ?? []).map((a) =>
+                            a.id === annotationId ? { ...a, ...partial } : a,
+                          ),
+                        }
+                      : f,
+                  ),
+                  updatedAt: nowISO(),
+                },
+              },
+            };
+          });
+        },
+
+        removeAnnotation(floorId, annotationId) {
+          set((state) => {
+            const id = state.currentDesignId;
+            if (!id) return state;
+            const design = state.designs[id];
+            if (!design) return state;
+            return {
+              designs: {
+                ...state.designs,
+                [id]: {
+                  ...design,
+                  floors: design.floors.map((f) =>
+                    f.id === floorId
+                      ? {
+                          ...f,
+                          annotations: (f.annotations ?? []).filter(
+                            (a) => a.id !== annotationId,
+                          ),
+                        }
+                      : f,
+                  ),
+                  updatedAt: nowISO(),
+                },
+              },
+            };
+          });
+        },
+
         removeDoor(floorId, doorId) {
           set((state) => {
             const id = state.currentDesignId;
@@ -737,10 +860,11 @@ export const useDesignStore = create<DesignState>()(
     ),
     {
       name: "deeper-vision-store",
-      version: 5,
+      version: 6,
       // v3 → v4: added installStatus, photos, warrantyUntil, lastInspectionAt,
       //          endOfLifeAt to every device.
-      // v4 → v5: added Floor.doors[]. Initialize to empty array on old floors.
+      // v4 → v5: added Floor.doors[].
+      // v5 → v6: added Floor.annotations[].
       migrate: (persistedState, fromVersion) => {
         const state = persistedState as {
           designs?: Record<string, DesignDocument>;
@@ -765,6 +889,14 @@ export const useDesignStore = create<DesignState>()(
             for (const floor of design.floors ?? []) {
               const f = floor as Floor & { doors?: unknown };
               if (!Array.isArray(f.doors)) f.doors = [];
+            }
+          }
+        }
+        if (fromVersion < 6) {
+          for (const design of Object.values(state.designs)) {
+            for (const floor of design.floors ?? []) {
+              const f = floor as Floor & { annotations?: unknown };
+              if (!Array.isArray(f.annotations)) f.annotations = [];
             }
           }
         }

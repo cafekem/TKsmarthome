@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Lightbulb, StickyNote, Trash2, TriangleAlert } from "lucide-react";
 import {
   useActiveFloor,
   useCurrentDesign,
@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import type {
+  Annotation,
   CameraDevice,
   Device,
   DevicePhoto,
@@ -38,14 +39,20 @@ export function PropertiesPanel() {
   const removeDevice = useDesignStore((s) => s.removeDevice);
   const updateDoor = useDesignStore((s) => s.updateDoor);
   const removeDoor = useDesignStore((s) => s.removeDoor);
+  const updateAnnotation = useDesignStore((s) => s.updateAnnotation);
+  const removeAnnotation = useDesignStore((s) => s.removeAnnotation);
 
   const selected: Device | null =
     floor?.devices.find((d) => d.id === selectedId) ?? null;
-  // Doors share the `selectedDeviceId` slot so the canvas can highlight either
-  // entity uniformly. Look it up here when no device matched.
+  // Doors AND annotations share the `selectedDeviceId` slot so the canvas can
+  // highlight either entity uniformly. Look them up here when no device matched.
   const selectedDoor: Door | null = selected
     ? null
     : (floor?.doors ?? []).find((d) => d.id === selectedId) ?? null;
+  const selectedAnnotation: Annotation | null =
+    selected || selectedDoor
+      ? null
+      : (floor?.annotations ?? []).find((a) => a.id === selectedId) ?? null;
 
   return (
     <div className="flex h-full w-full flex-col bg-sidebar">
@@ -62,9 +69,15 @@ export function PropertiesPanel() {
                     : "Network device"
               : selectedDoor
                 ? "Door"
-                : floor
-                  ? "Floor settings"
-                  : "Properties"}
+                : selectedAnnotation
+                  ? selectedAnnotation.kind === "warning"
+                    ? "Warning"
+                    : selectedAnnotation.kind === "idea"
+                      ? "Idea"
+                      : "Note"
+                  : floor
+                    ? "Floor settings"
+                    : "Properties"}
           </div>
           {(selected || selectedDoor) && (
             <div className="mt-0.5 text-[0.74rem] text-muted-foreground">
@@ -115,6 +128,14 @@ export function PropertiesPanel() {
                 updateDoor(floor.id, selectedDoor.id, partial)
               }
               onDelete={() => removeDoor(floor.id, selectedDoor.id)}
+            />
+          ) : selectedAnnotation && floor ? (
+            <AnnotationForm
+              annotation={selectedAnnotation}
+              onChange={(partial) =>
+                updateAnnotation(floor.id, selectedAnnotation.id, partial)
+              }
+              onDelete={() => removeAnnotation(floor.id, selectedAnnotation.id)}
             />
           ) : floor && design ? (
             <FloorForm
@@ -1021,6 +1042,104 @@ function PoeSummary({
       {portCount - usableCameras > 0
         ? `${portCount - usableCameras} ports left for non-PoE`
         : "all ports loaded"}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Edit a single annotation — change kind, text, or delete. Selected via the
+ * canvas marker or via the AI chat's `add_annotation` tool (which sets the
+ * marker and then leaves the user to refine).
+ */
+function AnnotationForm({
+  annotation,
+  onChange,
+  onDelete,
+}: {
+  annotation: Annotation;
+  onChange: (partial: Partial<Annotation>) => void;
+  onDelete: () => void;
+}) {
+  const Icon =
+    annotation.kind === "warning"
+      ? TriangleAlert
+      : annotation.kind === "idea"
+        ? Lightbulb
+        : StickyNote;
+  const accent =
+    annotation.kind === "warning"
+      ? "text-orange-600 dark:text-orange-300 bg-orange-500/15 ring-orange-500/30"
+      : annotation.kind === "idea"
+        ? "text-violet-700 dark:text-violet-300 bg-violet-500/15 ring-violet-500/30"
+        : "text-yellow-800 dark:text-yellow-200 bg-yellow-500/20 ring-yellow-500/30";
+  return (
+    <div className="space-y-4">
+      <div
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[0.72rem] font-medium ring-1",
+          accent,
+        )}
+      >
+        <Icon className="size-3" strokeWidth={2.2} />
+        {annotation.kind === "warning"
+          ? "Warning"
+          : annotation.kind === "idea"
+            ? "Idea"
+            : "Note"}
+        {annotation.author === "ai" && (
+          <span className="ml-1 text-[0.62rem] opacity-70">✦ AI</span>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-[0.78rem]">Text</Label>
+        <textarea
+          rows={4}
+          value={annotation.text}
+          onChange={(e) => onChange({ text: e.target.value })}
+          className="w-full rounded-md border border-border bg-card px-2.5 py-1.5 text-[0.82rem] leading-relaxed outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-[0.78rem]">Kind</Label>
+        <div className="grid grid-cols-3 gap-1.5">
+          {(["note", "warning", "idea"] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => onChange({ kind: k })}
+              className={cn(
+                "rounded-md border px-2 py-1.5 text-[0.74rem] capitalize transition-colors",
+                annotation.kind === k
+                  ? "border-foreground/40 bg-foreground/[0.06] font-medium"
+                  : "border-border/50 text-muted-foreground hover:bg-foreground/[0.04]",
+              )}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="text-[0.7rem] text-muted-foreground">
+        Pinned at ({annotation.position.x.toFixed(0)},{" "}
+        {annotation.position.y.toFixed(0)})
+      </div>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onDelete}
+        className="w-full text-rose-600 hover:bg-rose-500/[0.08] hover:text-rose-600"
+      >
+        <Trash2 className="size-3.5" />
+        Delete annotation
+      </Button>
     </div>
   );
 }

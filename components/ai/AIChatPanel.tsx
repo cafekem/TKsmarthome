@@ -5,24 +5,28 @@ import {
   ArrowUp,
   Brain,
   Camera,
+  DoorOpen,
   ExternalLink,
-  FilePlus2,
   Globe,
   ImagePlus,
+  Lightbulb,
   Loader2,
   MapPin,
-  MessageSquareText,
-  Move,
+  MousePointer2,
+  PencilRuler,
   Plus,
+  Receipt,
   RotateCw,
+  Ruler,
   Search,
   ShieldCheck,
   Sparkles,
   Square,
+  StickyNote,
   Trash2,
+  TriangleAlert,
   Wand2,
   WandSparkles,
-  X,
   Zap,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -65,7 +69,7 @@ export function AIChatPanel() {
    * web", "Placing camera", "Moving device", etc.
    */
   const [status, setStatus] = useState<{
-    icon: "brain" | "search" | "place" | "move" | "rotate" | "delete" | "edit" | "wall" | "door";
+    icon: StatusIcon;
     label: string;
   }>({ icon: "brain", label: "Thinking" });
   const [activeSearch, setActiveSearch] = useState<string | null>(null);
@@ -130,9 +134,9 @@ export function AIChatPanel() {
           x: pos.x,
           y: pos.y,
           label: `Rotating to ${op.newRotationDegrees.toFixed(0)}°`,
-          tone: "edit",
+          tone: "rotate",
         });
-      setStatus({ icon: "rotate", label: "Adjusting rotation" });
+      setStatus({ icon: "rotate", label: "Rotating device" });
     } else if (op.kind === "remove-device") {
       const pos = devicePos(op.deviceId);
       if (pos)
@@ -147,12 +151,38 @@ export function AIChatPanel() {
         x: (op.startX + op.endX) / 2,
         y: (op.startY + op.endY) / 2,
         label: "Drawing wall",
-        tone: "add",
+        tone: "wall",
       });
       setStatus({ icon: "wall", label: "Drawing wall" });
+    } else if (op.kind === "remove-wall") {
+      // No screen position handy without a wall lookup; just status.
+      setStatus({ icon: "wall", label: "Removing wall" });
     } else if (op.kind === "add-door") {
-      pingAICursor({ x: op.x, y: op.y, label: "Adding door", tone: "add" });
+      pingAICursor({ x: op.x, y: op.y, label: "Adding door", tone: "door" });
       setStatus({ icon: "door", label: "Adding door" });
+    } else if (op.kind === "set-floor-scale") {
+      setStatus({ icon: "calibrate", label: "Recalibrating scale" });
+    } else if (op.kind === "add-annotation") {
+      pingAICursor({
+        x: op.x,
+        y: op.y,
+        label:
+          op.annotationKind === "warning"
+            ? "Flagging issue"
+            : op.annotationKind === "idea"
+              ? "Pinning idea"
+              : "Pinning note",
+        tone: "annotate",
+      });
+      setStatus({ icon: "annotate", label: "Pinning annotation" });
+    } else if (op.kind === "remove-annotation") {
+      setStatus({ icon: "annotate", label: "Removing annotation" });
+    } else if (op.kind === "add-quote-line-item") {
+      setStatus({ icon: "quote", label: "Updating quote" });
+    } else if (op.kind === "remove-quote-line-item") {
+      setStatus({ icon: "quote", label: "Removing quote line" });
+    } else if (op.kind === "update-quote-settings") {
+      setStatus({ icon: "quote", label: "Editing quote" });
     }
   }
 
@@ -430,8 +460,16 @@ function EmptyState({
       text: "Find a 4K dome camera under $300 and add 4 of them.",
     },
     {
-      icon: <Move className="size-3.5 text-sky-500" strokeWidth={1.8} />,
+      icon: <MousePointer2 className="size-3.5 text-indigo-500" strokeWidth={1.8} />,
       text: "Move the lobby camera so it faces the front door.",
+    },
+    {
+      icon: <Receipt className="size-3.5 text-teal-500" strokeWidth={1.8} />,
+      text: "Look up local permit costs and add them to my quote.",
+    },
+    {
+      icon: <StickyNote className="size-3.5 text-yellow-500" strokeWidth={1.8} />,
+      text: "Pin a warning at every door without a reader.",
     },
     {
       icon: <Plus className="size-3.5 text-emerald-500" strokeWidth={1.8} />,
@@ -507,30 +545,19 @@ function BusyStatus({
   status,
   activeSearch,
 }: {
-  status: { icon: string; label: string };
+  status: { icon: StatusIcon; label: string };
   activeSearch: string | null;
 }) {
-  const Icon =
-    status.icon === "search"
-      ? Search
-      : status.icon === "place"
-        ? MapPin
-        : status.icon === "move"
-          ? Move
-          : status.icon === "rotate"
-            ? RotateCw
-            : status.icon === "delete"
-              ? Trash2
-              : status.icon === "edit"
-                ? WandSparkles
-                : status.icon === "wall"
-                  ? FilePlus2
-                  : status.icon === "door"
-                    ? FilePlus2
-                    : Brain;
+  const tone = STATUS_TONE[status.icon];
+  const Icon = tone.Icon;
   return (
     <div className="flex flex-col gap-1 px-1 py-1">
-      <div className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[0.7rem] text-primary ring-1 ring-primary/25">
+      <div
+        className={cn(
+          "inline-flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.7rem] ring-1",
+          tone.pill,
+        )}
+      >
         <Icon className="size-3 animate-pulse" strokeWidth={2.4} />
         <span className="font-medium">{status.label}…</span>
       </div>
@@ -550,6 +577,76 @@ function BusyStatus({
     </div>
   );
 }
+
+/**
+ * One row per agent action — pairs a Lucide icon with a colored pill class
+ * so each status surface (BusyStatus, OperationChip, AICursorOverlay) can
+ * paint itself the same way.
+ */
+type StatusIcon =
+  | "brain"
+  | "search"
+  | "place"
+  | "move"
+  | "rotate"
+  | "delete"
+  | "edit"
+  | "wall"
+  | "door"
+  | "annotate"
+  | "quote"
+  | "calibrate";
+
+const STATUS_TONE: Record<
+  StatusIcon,
+  { pill: string; Icon: React.ComponentType<{ className?: string; strokeWidth?: number }> }
+> = {
+  brain: { pill: "bg-primary/10 text-primary ring-primary/25", Icon: Brain },
+  search: {
+    pill: "bg-sky-500/12 text-sky-700 dark:text-sky-300 ring-sky-500/30",
+    Icon: Search,
+  },
+  place: {
+    pill: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 ring-emerald-500/30",
+    Icon: MapPin,
+  },
+  move: {
+    pill: "bg-indigo-500/12 text-indigo-700 dark:text-indigo-300 ring-indigo-500/30",
+    Icon: MousePointer2,
+  },
+  rotate: {
+    pill: "bg-violet-500/12 text-violet-700 dark:text-violet-300 ring-violet-500/30",
+    Icon: RotateCw,
+  },
+  delete: {
+    pill: "bg-rose-500/12 text-rose-700 dark:text-rose-300 ring-rose-500/30",
+    Icon: Trash2,
+  },
+  edit: {
+    pill: "bg-amber-500/12 text-amber-700 dark:text-amber-300 ring-amber-500/30",
+    Icon: WandSparkles,
+  },
+  wall: {
+    pill: "bg-emerald-600/12 text-emerald-700 dark:text-emerald-300 ring-emerald-600/30",
+    Icon: PencilRuler,
+  },
+  door: {
+    pill: "bg-cyan-500/12 text-cyan-700 dark:text-cyan-300 ring-cyan-500/30",
+    Icon: DoorOpen,
+  },
+  annotate: {
+    pill: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 ring-yellow-500/30",
+    Icon: StickyNote,
+  },
+  quote: {
+    pill: "bg-teal-500/12 text-teal-700 dark:text-teal-300 ring-teal-500/30",
+    Icon: Receipt,
+  },
+  calibrate: {
+    pill: "bg-fuchsia-500/12 text-fuchsia-700 dark:text-fuchsia-300 ring-fuchsia-500/30",
+    Icon: Ruler,
+  },
+};
 
 /* -------------------------------------------------------------------------- */
 
@@ -619,43 +716,107 @@ function OperationChip({ op }: { op: ChatOperation }) {
   );
 }
 
+/**
+ * Per-operation chip style — each tool gets a unique color + Lucide icon
+ * so the user can read at a glance what kind of edit just landed.
+ *  add-device       → emerald + Plus
+ *  remove-device    → rose + Trash
+ *  move-device      → indigo + MousePointer2
+ *  rotate-device    → violet + RotateCw
+ *  update-device    → amber + WandSparkles (the "pencil")
+ *  add-wall         → emerald (darker) + PencilRuler
+ *  remove-wall      → rose + Trash
+ *  add-door         → cyan + DoorOpen
+ *  set-floor-scale  → fuchsia + Ruler
+ *  add-annotation   → yellow + StickyNote (or warning/idea variants)
+ *  remove-anno      → rose + StickyNote-strike
+ *  add-quote-line   → teal + Receipt
+ *  remove-quote     → rose + Receipt
+ *  update-quote     → teal + Receipt
+ */
 function chipStyleFor(op: ChatOperation): {
   tone: string;
   Icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
 } {
-  if (
-    op.kind === "add-device" ||
-    op.kind === "add-wall" ||
-    op.kind === "add-door"
-  )
-    return {
-      tone: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 ring-emerald-500/25",
-      Icon: Plus,
-    };
-  if (op.kind === "remove-device" || op.kind === "remove-wall")
-    return {
-      tone: "bg-rose-500/12 text-rose-700 dark:text-rose-300 ring-rose-500/25",
-      Icon: Trash2,
-    };
-  if (op.kind === "move-device")
-    return {
-      tone: "bg-sky-500/12 text-sky-700 dark:text-sky-300 ring-sky-500/25",
-      Icon: Move,
-    };
-  if (op.kind === "rotate-device")
-    return {
-      tone: "bg-sky-500/12 text-sky-700 dark:text-sky-300 ring-sky-500/25",
-      Icon: RotateCw,
-    };
-  if (op.kind === "update-device")
-    return {
-      tone: "bg-amber-500/12 text-amber-700 dark:text-amber-300 ring-amber-500/25",
-      Icon: WandSparkles,
-    };
-  return {
-    tone: "bg-foreground/[0.06] text-foreground/80 ring-foreground/15",
-    Icon: Zap,
-  };
+  switch (op.kind) {
+    case "add-device":
+      return {
+        tone: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 ring-emerald-500/25",
+        Icon: Plus,
+      };
+    case "remove-device":
+    case "remove-wall":
+      return {
+        tone: "bg-rose-500/12 text-rose-700 dark:text-rose-300 ring-rose-500/25",
+        Icon: Trash2,
+      };
+    case "move-device":
+      return {
+        tone: "bg-indigo-500/12 text-indigo-700 dark:text-indigo-300 ring-indigo-500/25",
+        Icon: MousePointer2,
+      };
+    case "rotate-device":
+      return {
+        tone: "bg-violet-500/12 text-violet-700 dark:text-violet-300 ring-violet-500/25",
+        Icon: RotateCw,
+      };
+    case "update-device":
+      return {
+        tone: "bg-amber-500/12 text-amber-700 dark:text-amber-300 ring-amber-500/25",
+        Icon: WandSparkles,
+      };
+    case "add-wall":
+      return {
+        tone: "bg-emerald-600/12 text-emerald-700 dark:text-emerald-300 ring-emerald-600/30",
+        Icon: PencilRuler,
+      };
+    case "add-door":
+      return {
+        tone: "bg-cyan-500/12 text-cyan-700 dark:text-cyan-300 ring-cyan-500/25",
+        Icon: DoorOpen,
+      };
+    case "set-floor-scale":
+      return {
+        tone: "bg-fuchsia-500/12 text-fuchsia-700 dark:text-fuchsia-300 ring-fuchsia-500/25",
+        Icon: Ruler,
+      };
+    case "add-annotation":
+      return {
+        tone:
+          op.annotationKind === "warning"
+            ? "bg-orange-500/12 text-orange-700 dark:text-orange-300 ring-orange-500/30"
+            : op.annotationKind === "idea"
+              ? "bg-violet-500/12 text-violet-700 dark:text-violet-300 ring-violet-500/30"
+              : "bg-yellow-500/15 text-yellow-800 dark:text-yellow-200 ring-yellow-500/30",
+        Icon:
+          op.annotationKind === "warning"
+            ? TriangleAlert
+            : op.annotationKind === "idea"
+              ? Lightbulb
+              : StickyNote,
+      };
+    case "remove-annotation":
+      return {
+        tone: "bg-rose-500/12 text-rose-700 dark:text-rose-300 ring-rose-500/25",
+        Icon: StickyNote,
+      };
+    case "add-quote-line-item":
+    case "update-quote-settings":
+      return {
+        tone: "bg-teal-500/12 text-teal-700 dark:text-teal-300 ring-teal-500/25",
+        Icon: Receipt,
+      };
+    case "remove-quote-line-item":
+      return {
+        tone: "bg-rose-500/12 text-rose-700 dark:text-rose-300 ring-rose-500/25",
+        Icon: Receipt,
+      };
+    default:
+      return {
+        tone: "bg-foreground/[0.06] text-foreground/80 ring-foreground/15",
+        Icon: Zap,
+      };
+  }
 }
 
 function CitationChip({ citation }: { citation: Citation }) {
@@ -675,6 +836,3 @@ function CitationChip({ citation }: { citation: Citation }) {
   );
 }
 
-// Re-export common icons so MessageSquareText is reachable for tabs without
-// re-resolving via the bundler graph in test environments.
-export { MessageSquareText, X };

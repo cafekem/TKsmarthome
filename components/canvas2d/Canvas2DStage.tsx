@@ -21,6 +21,7 @@ import { distance, screenToDesign, snapToNearestWall } from "@/lib/geometry";
 import { useImage } from "./useImage";
 import { DeviceShape } from "./DeviceShape";
 import { AICursorOverlay } from "./AICursorOverlay";
+import { AnnotationsLayer } from "./AnnotationsLayer";
 
 interface Canvas2DStageProps {
   width: number;
@@ -580,6 +581,14 @@ export function Canvas2DStage({
                 }
               />
             ))}
+
+          {/* Sticky-note style annotations — read-only on canvas, the AI
+              chat or properties panel manages create/delete. */}
+          <AnnotationsLayer
+            annotations={floor.annotations ?? []}
+            selectedId={selectedId}
+            onSelect={(id) => selectDevice(id)}
+          />
         </Layer>
       </Stage>
 
