@@ -16,16 +16,11 @@ import {
 } from "@/lib/walk";
 
 /**
- * The simulation "subject" walking through the building. Visual + animation
- * design is a direct port of the PlayerCharacter from mohosy/recruit-main
- * (https://github.com/mohosy/recruit-main/blob/main/components/room/player-character.tsx) —
- * same palette (cream / orange cap / cyan shirt / navy pants), same low-poly
- * RoundedBox construction with drei Outlines, same walk-cycle math.
- *
- * The character is reused rather than re-imagined because the aesthetic
- * already nails the "professional but approachable" feel we want for B2B
- * security demos — you're not watching a Roblox blockhead, but you're also
- * not pretending to render a photoreal human.
+ * The simulation "subject" walking through the building.
+ * Visually matches PegmanCharacter — same palette + proportions — but
+ * keeps its own copy of the geometry inline so the animation refs into
+ * limbs/body/head stay simple. If you change palette/proportions, update
+ * both this file and PegmanCharacter.tsx.
  */
 
 const PLAYER_BODY_HUE = "#F5E9D0";

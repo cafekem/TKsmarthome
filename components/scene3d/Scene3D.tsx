@@ -2,11 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Box, Compass, LogOut, Move3d, Sparkles, User } from "lucide-react";
+import { Box, Compass, LogOut, Move3d, Sparkles } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { LayerToggles } from "@/components/editor/LayerToggles";
+import {
+  PegmanThumbnail,
+  type PegmanThumbnailHandle,
+} from "./PegmanThumbnail";
 
 const Scene3DCanvas = dynamic(
   () => import("./Scene3DCanvas").then((m) => m.Scene3DCanvas),
@@ -95,7 +99,7 @@ export function Scene3D({ showSim = false }: { showSim?: boolean } = {}) {
         <div className="pointer-events-none absolute bottom-3 left-3 z-20 inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-xs text-muted-foreground backdrop-blur">
           <Compass className="size-3.5 text-primary" />
           <span>
-            Drag to orbit · Scroll to zoom · Drag <User className="inline size-3" /> onto the scene to walk
+            Drag to orbit · Scroll to zoom · Drag the character onto the scene to walk
           </span>
         </div>
       )}
@@ -115,41 +119,43 @@ export function Scene3D({ showSim = false }: { showSim?: boolean } = {}) {
 }
 
 /**
- * Draggable "Pegman" — modeled after Google Maps' character icon. The user
- * grabs the button and drops it onto the 3D scene. Scene3DCanvas catches the
- * `application/x-dv-pegman` dataTransfer type, raycasts to find the floor
- * world point, sets `walkSpawnOverride` to that point, and switches into
- * walk mode. Replaces the old "walk button" approach which just dumped the
- * user at a fixed corner of the floor.
+ * Draggable "Pegman" — modeled after Google Maps' character icon. The
+ * button itself renders the actual 3D Pegman character (same model the
+ * simulator's walking subject uses), and on drag start we snapshot that
+ * canvas to a PNG data URL so the cursor carries the real 3D character
+ * — not a flat icon or emoji.
+ *
+ * Drop the cursor anywhere on the 3D scene → Scene3DCanvas raycasts to
+ * find the floor world point, sets walkSpawnOverride, and switches into
+ * walk mode.
  */
 function Pegman() {
+  const thumbnailRef = useRef<PegmanThumbnailHandle>(null);
+
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData("application/x-dv-pegman", "1");
     e.dataTransfer.effectAllowed = "copy";
 
-    // Custom drag image — a tinted character glyph so the cursor "carries"
-    // a person instead of the button's row.
-    const ghost = document.createElement("div");
-    ghost.style.position = "fixed";
-    ghost.style.top = "-1000px";
-    ghost.style.left = "-1000px";
-    ghost.style.width = "44px";
-    ghost.style.height = "44px";
-    ghost.style.borderRadius = "50%";
-    ghost.style.background =
-      "radial-gradient(circle at 50% 35%, #fef3c7 0%, #f59e0b 60%, #b45309 100%)";
-    ghost.style.boxShadow = "0 8px 20px -6px rgba(0,0,0,0.4)";
-    ghost.style.display = "flex";
-    ghost.style.alignItems = "center";
-    ghost.style.justifyContent = "center";
-    ghost.style.color = "#451a03";
-    ghost.style.fontWeight = "700";
-    ghost.style.fontSize = "20px";
-    ghost.style.fontFamily = "system-ui, sans-serif";
-    ghost.textContent = "🚶";
-    document.body.appendChild(ghost);
-    e.dataTransfer.setDragImage(ghost, 22, 22);
-    window.setTimeout(() => ghost.remove(), 0);
+    // Snapshot the live 3D thumbnail to a PNG and use that as the drag
+    // image. The cursor visually carries the real character (orange cap,
+    // cyan shirt, navy pants — same as the simulation walker) instead of
+    // a flat lucide icon.
+    const dataUrl = thumbnailRef.current?.snapshot();
+    if (dataUrl) {
+      const img = new Image();
+      img.src = dataUrl;
+      // Slight enlargement so the drag cursor reads at a comfortable size
+      // even though the button itself is 36×36.
+      img.style.position = "fixed";
+      img.style.top = "-1000px";
+      img.style.left = "-1000px";
+      img.style.width = "64px";
+      img.style.height = "64px";
+      img.style.filter = "drop-shadow(0 6px 12px rgba(0, 0, 0, 0.35))";
+      document.body.appendChild(img);
+      e.dataTransfer.setDragImage(img, 32, 32);
+      window.setTimeout(() => img.remove(), 0);
+    }
   }
 
   return (
@@ -161,13 +167,13 @@ function Pegman() {
             draggable
             onDragStart={handleDragStart}
             className={cn(
-              "flex size-9 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-colors",
-              "hover:text-foreground hover:bg-accent",
-              "cursor-grab active:cursor-grabbing",
+              "flex size-9 items-center justify-center rounded-lg border border-transparent transition-colors",
+              "hover:bg-accent",
+              "cursor-grab active:cursor-grabbing overflow-hidden",
             )}
             aria-label="Drag onto the scene to walk through the building"
           >
-            <User className="size-4" />
+            <PegmanThumbnail ref={thumbnailRef} />
           </button>
         }
       />
