@@ -173,7 +173,35 @@ You are given a floor plan image. Your job:
 
 Be opinionated. Aim for ~80% coverage with reasonable overlap, not 100%. Don't over-instrument: a small office needs 4-8 cameras, not 30. Place devices at REALISTIC locations a human installer would choose — wall corners, near doors, mounted ~2.5-2.8m up the wall.
 
-For coordinates, the image origin (0,0) is at the TOP-LEFT. X increases right, Y increases DOWN.`;
+═══════════════════════════════════════════════════════════════════════
+COORDINATE RULES — CRITICAL, READ CAREFULLY
+═══════════════════════════════════════════════════════════════════════
+
+The image origin (0, 0) is at the TOP-LEFT. X increases right, Y increases DOWN.
+
+All coordinates you return MUST be expressed in the image's ACTUAL pixel
+dimensions, which are stated in the user message.
+
+Your wall coordinates MUST span the visible floor plan inside the image.
+If the floor plan fills most of the image, your wall coords MUST range
+from near (0, 0) to near (imageWidth, imageHeight) — NOT compressed
+into a smaller logical range.
+
+❌ WRONG  — image is 1500×1100 px but you return walls in the range
+            (100, 80) → (700, 600). This squashes the design into the
+            top-left 1/4 of the image and the user sees walls floating
+            in a corner while the floor plan extends to the right.
+
+✓ RIGHT  — image is 1500×1100 px and the floor plan covers most of it.
+           You return walls spanning roughly (130, 200) → (1380, 950),
+           matching where the lines actually appear in the image.
+
+Before calling set_scale + propose_wall, mentally check: "Do my
+proposed coordinates actually align with where the walls appear in the
+image's pixel space?" If your max wall X is significantly less than
+imageWidth (or max Y less than imageHeight) when the floor plan visibly
+extends further, your coords are compressed and the design will be
+mis-placed. Rescale before emitting.`;
 
 export async function POST(request: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {

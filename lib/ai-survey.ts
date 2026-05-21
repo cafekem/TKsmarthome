@@ -30,7 +30,24 @@ export interface SurveyResponse {
 
 /**
  * Read a File (from a file input) into a base64 data URL and capture its
- * native pixel dimensions.
+ * dimensions.
+ *
+ * Large images (>1500 px on the long edge) are downscaled before
+ * returning. We do this for TWO reasons:
+ *
+ *  1. **Claude vision coordinate stability.** When the source image is
+ *     significantly larger than ~1500 px, Claude tends to return
+ *     wall/device coordinates compressed into a smaller logical range
+ *     (e.g. 0–700) instead of the actual image-pixel range. The result
+ *     is walls clustered in the top-left corner of the canvas while the
+ *     planImage extends the full size. Normalizing the input fixes this
+ *     reliably.
+ *  2. **Token cost.** Bigger images cost more input tokens for no
+ *     additional value — Claude has already understood the layout at
+ *     1500 px.
+ *
+ * The downscaled image is what we save as `planImage` AND what we send
+ * to Claude, so coordinates and rendering stay aligned.
  */
 export async function loadImageMeta(file: File): Promise<{
   base64: string;
@@ -43,23 +60,64 @@ export async function loadImageMeta(file: File): Promise<{
     ? (file.type as "image/png" | "image/jpeg" | "image/webp" | "image/gif")
     : "image/png";
 
-  const base64 = await new Promise<string>((resolve, reject) => {
+  const rawBase64 = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
 
-  const dims = await new Promise<{ width: number; height: number }>(
-    (resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-      img.onerror = () => reject(new Error("Could not load image"));
-      img.src = base64;
-    },
-  );
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error("Could not load image"));
+    i.src = rawBase64;
+  });
 
-  return { base64, mediaType, width: dims.width, height: dims.height };
+  const MAX_EDGE = 1500;
+  const longest = Math.max(img.naturalWidth, img.naturalHeight);
+
+  // Already small enough — return the raw image untouched.
+  if (longest <= MAX_EDGE) {
+    return {
+      base64: rawBase64,
+      mediaType,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+    };
+  }
+
+  const scale = MAX_EDGE / longest;
+  const w = Math.round(img.naturalWidth * scale);
+  const h = Math.round(img.naturalHeight * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    // Canvas unavailable — fall back to the raw image and accept the
+    // coordinate-compression risk rather than blowing up.
+    return {
+      base64: rawBase64,
+      mediaType,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+    };
+  }
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, w, h);
+
+  // JPEG at 92% is visually indistinguishable from PNG for typical
+  // architectural line art with labels, and is ~3-4× smaller. Switching
+  // PNG → JPEG also drops alpha which is fine for floor plans.
+  const downscaledBase64 = canvas.toDataURL("image/jpeg", 0.92);
+
+  return {
+    base64: downscaledBase64,
+    mediaType: "image/jpeg",
+    width: w,
+    height: h,
+  };
 }
 
 /**
