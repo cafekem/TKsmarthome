@@ -6,6 +6,7 @@ import {
   Brain,
   Camera,
   DoorOpen,
+  Eye,
   ExternalLink,
   Globe,
   ImagePlus,
@@ -34,8 +35,12 @@ import { useActiveFloor, useCurrentDesign, useDesignStore } from "@/lib/store";
 import {
   applyChatOperation,
   citationHost,
+  clearChatHistory,
   describeOperation,
+  loadChatHistory,
+  saveChatHistory,
   streamAIChat,
+  trimHistoryForServer,
   type ChatMessage,
   type ChatOperation,
   type Citation,
@@ -60,7 +65,23 @@ export function AIChatPanel() {
   const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
   const setAIAdvisorOpen = useDesignStore((s) => s.setAIAdvisorOpen);
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Hydrate from localStorage on first mount so the conversation survives
+  // a page reload. Keyed by design id — switching designs gives a fresh chat.
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    design ? loadChatHistory(design.id) : [],
+  );
+  // When the design changes (e.g. user opens a different project), swap in
+  // that design's saved history.
+  useEffect(() => {
+    if (!design) return;
+    setMessages(loadChatHistory(design.id));
+  }, [design?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Persist on every change.
+  useEffect(() => {
+    if (!design) return;
+    saveChatHistory(design.id, messages);
+  }, [design?.id, messages]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   /**
@@ -183,6 +204,11 @@ export function AIChatPanel() {
       setStatus({ icon: "quote", label: "Removing quote line" });
     } else if (op.kind === "update-quote-settings") {
       setStatus({ icon: "quote", label: "Editing quote" });
+    } else if (op.kind === "view-from-camera") {
+      const pos = devicePos(op.deviceId);
+      if (pos)
+        pingAICursor({ x: pos.x, y: pos.y, label: "Showing POV", tone: "edit" });
+      setStatus({ icon: "edit", label: "Switching to camera POV" });
     }
   }
 
@@ -207,10 +233,11 @@ export function AIChatPanel() {
     const abort = new AbortController();
     abortRef.current = abort;
 
-    const historyForServer = [...messages, userMsg].map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    // Token-efficient memory: send a trimmed-and-recapped version of the
+    // history (keeps last ~14 messages verbatim, replaces older ones with
+    // a compact bullet recap). The UI still shows the full conversation
+    // locally from `messages`.
+    const historyForServer = trimHistoryForServer([...messages, userMsg], 14);
 
     const opsApplied: ChatOperation[] = [];
 
@@ -335,6 +362,7 @@ export function AIChatPanel() {
   function clear() {
     if (busy) stop();
     setMessages([]);
+    if (design) clearChatHistory(design.id);
   }
 
   return (
@@ -478,6 +506,14 @@ function EmptyState({
     {
       icon: <Wand2 className="size-3.5 text-amber-500" strokeWidth={1.8} />,
       text: "Critique my current layout — what's missing?",
+    },
+    {
+      icon: <Lightbulb className="size-3.5 text-violet-500" strokeWidth={1.8} />,
+      text: "Suggest where I should put cameras in the conference room.",
+    },
+    {
+      icon: <Eye className="size-3.5 text-rose-500" strokeWidth={1.8} />,
+      text: "Show me the POV of the front-door camera.",
     },
   ];
   return (
@@ -810,6 +846,11 @@ function chipStyleFor(op: ChatOperation): {
       return {
         tone: "bg-rose-500/12 text-rose-700 dark:text-rose-300 ring-rose-500/25",
         Icon: Receipt,
+      };
+    case "view-from-camera":
+      return {
+        tone: "bg-rose-500/12 text-rose-700 dark:text-rose-300 ring-rose-500/25",
+        Icon: Eye,
       };
     default:
       return {

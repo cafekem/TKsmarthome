@@ -92,7 +92,8 @@ export type ChatOperation =
       regionalNotes?: string;
       benchmark?: string;
       narrative?: string;
-    };
+    }
+  | { kind: "view-from-camera"; deviceId: string };
 
 /** Streaming callbacks the UI subscribes to. */
 export interface ChatStreamHandlers {
@@ -471,6 +472,14 @@ export function applyChatOperation(floorId: string, op: ChatOperation): boolean 
       store.updateQuoteSettings({ extraLineItems: next });
       return true;
     }
+    if (op.kind === "view-from-camera") {
+      const camera = floor.devices.find(
+        (d) => d.id === op.deviceId && d.type === "camera",
+      );
+      if (!camera) return false;
+      store.enterCameraPov(op.deviceId);
+      return true;
+    }
     if (op.kind === "update-quote-settings") {
       const partial: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(op)) {
@@ -527,6 +536,8 @@ export function describeOperation(op: ChatOperation): string {
       return `+ quote: ${op.description} (${op.quantity} × $${op.unitCost})`;
     case "remove-quote-line-item":
       return `× quote line #${op.index + 1}`;
+    case "view-from-camera":
+      return `👁 POV ${op.deviceId}`;
     case "update-quote-settings": {
       const bits: string[] = [];
       if (op.clientName) bits.push(`client "${op.clientName}"`);
@@ -549,5 +560,116 @@ export function citationHost(url: string): string {
     return new URL(url).hostname.replace(/^www\./, "");
   } catch {
     return url;
+  }
+}
+
+/**
+ * Compress a long conversation into a shorter one for the server so we
+ * don't burn tokens replaying every old reply each turn.
+ *
+ *  - If `messages.length <= keepRecent + 2`, return as-is (no work).
+ *  - Otherwise, keep the LAST `keepRecent` messages verbatim and replace
+ *    every older message with a single synthetic user message that
+ *    summarises what happened. The summary lists user-turn topics and
+ *    every distinct operation kind the agent ran — enough for the agent
+ *    to recall the gist without re-reading everything.
+ *
+ * The compressed array is sent to the server; the UI keeps the full
+ * conversation displayed locally.
+ */
+export function trimHistoryForServer(
+  messages: ChatMessage[],
+  keepRecent = 14,
+): { role: "user" | "assistant"; content: string }[] {
+  if (messages.length <= keepRecent + 2) {
+    return messages.map((m) => ({ role: m.role, content: m.content }));
+  }
+  const older = messages.slice(0, messages.length - keepRecent);
+  const recent = messages.slice(messages.length - keepRecent);
+
+  // Build a compact recap from the older slice.
+  const userTopics: string[] = [];
+  const opCounts: Record<string, number> = {};
+  let webSearches = 0;
+  let citationCount = 0;
+
+  for (const m of older) {
+    if (m.role === "user") {
+      const first = m.content.split("\n")[0].trim();
+      if (first) userTopics.push(first.length > 80 ? first.slice(0, 78) + "…" : first);
+    }
+    for (const op of m.operations ?? []) opCounts[op.kind] = (opCounts[op.kind] ?? 0) + 1;
+    webSearches += m.webSearches ?? 0;
+    citationCount += (m.citations ?? []).length;
+  }
+
+  const opSummary = Object.entries(opCounts)
+    .map(([k, n]) => `${k} ×${n}`)
+    .join(", ");
+
+  const lines: string[] = [];
+  lines.push(`[Conversation recap — ${older.length} earlier message(s) trimmed for token efficiency]`);
+  if (userTopics.length > 0) {
+    lines.push("Earlier asks from the user:");
+    for (const t of userTopics.slice(-8)) lines.push(`  • ${t}`);
+    if (userTopics.length > 8)
+      lines.push(`  • (…and ${userTopics.length - 8} more)`);
+  }
+  if (opSummary) {
+    lines.push(`Actions applied so far: ${opSummary}.`);
+  }
+  if (webSearches > 0) {
+    lines.push(`Web searches run: ${webSearches} (citations: ${citationCount}).`);
+  }
+  lines.push(
+    "[End recap — full conversation continues below. Use the current floor state as ground truth.]",
+  );
+
+  const recap: ChatMessage = {
+    role: "user",
+    content: lines.join("\n"),
+  };
+  return [recap, ...recent].map((m) => ({ role: m.role, content: m.content }));
+}
+
+/**
+ * Persist chat history per-design to localStorage so the conversation
+ * survives reloads. We strip transient flags (`applied`) since they don't
+ * need to round-trip.
+ */
+export function saveChatHistory(designId: string, messages: ChatMessage[]) {
+  if (typeof window === "undefined") return;
+  try {
+    // Cap stored size at the last 200 messages — plenty of memory without
+    // unbounded growth.
+    const trimmed = messages.slice(-200);
+    window.localStorage.setItem(
+      `dv-chat-history:${designId}`,
+      JSON.stringify(trimmed),
+    );
+  } catch {
+    /* localStorage quota or disabled — silently ignore */
+  }
+}
+
+export function loadChatHistory(designId: string): ChatMessage[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(`dv-chat-history:${designId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as ChatMessage[];
+  } catch {
+    return [];
+  }
+}
+
+export function clearChatHistory(designId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(`dv-chat-history:${designId}`);
+  } catch {
+    /* ignore */
   }
 }

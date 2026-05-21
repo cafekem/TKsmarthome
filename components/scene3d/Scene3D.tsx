@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Box, Compass, LogOut, Move3d, Sparkles } from "lucide-react";
+import { Box, Compass, Eye, LogOut, Move3d, Sparkles } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,11 @@ export function Scene3D({ showSim = false }: { showSim?: boolean } = {}) {
   const toggleCoverage = useDesignStore((s) => s.toggleCoverage);
   const threeDMode = useDesignStore((s) => s.threeDMode);
   const setThreeDMode = useDesignStore((s) => s.setThreeDMode);
+  const cameraPovTargetId = useDesignStore((s) => s.cameraPovTargetId);
+  const exitCameraPov = useDesignStore((s) => s.exitCameraPov);
+  const povTarget = floor?.devices.find(
+    (d) => d.id === cameraPovTargetId && d.type === "camera",
+  );
 
   useEffect(() => {
     const el = containerRef.current;
@@ -114,6 +119,55 @@ export function Scene3D({ showSim = false }: { showSim?: boolean } = {}) {
           Exit walk
         </button>
       )}
+
+      {threeDMode === "pov" && povTarget && (
+        <>
+          {/* Faux camera-viewfinder frame so the POV reads as "through a
+              lens" instead of a regular 3D view. */}
+          <div className="pointer-events-none absolute inset-0 z-10">
+            <div className="absolute inset-4 border-2 border-rose-500/70 rounded-sm shadow-[inset_0_0_40px_oklch(0_0_0/35%)]" />
+            <div className="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-black/60 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/60 to-transparent" />
+            {/* Corner marks */}
+            <CornerMark className="top-3 left-3" />
+            <CornerMark className="top-3 right-3" rotate={90} />
+            <CornerMark className="bottom-3 right-3" rotate={180} />
+            <CornerMark className="bottom-3 left-3" rotate={270} />
+            {/* Recording dot */}
+            <div className="absolute left-6 top-6 inline-flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-rose-300">
+              <span className="size-1.5 rounded-full bg-rose-500 animate-pulse" />
+              REC · POV
+            </div>
+            {/* Label */}
+            <div className="absolute left-6 bottom-6 inline-flex items-center gap-1.5 rounded-md bg-black/55 px-2 py-1 text-[11px] font-mono text-white">
+              <Eye className="size-3 text-rose-300" strokeWidth={2.2} />
+              {povTarget.label} · {povTarget.type === "camera" ? `${povTarget.fovDegrees}° FOV` : ""}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => exitCameraPov()}
+            className="pointer-events-auto absolute right-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-[0.78rem] font-medium text-background shadow-lg hover:bg-foreground/85"
+          >
+            <LogOut className="size-3.5" />
+            Exit POV
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Small corner bracket in the POV viewfinder frame. */
+function CornerMark({ className, rotate = 0 }: { className?: string; rotate?: number }) {
+  return (
+    <div
+      className={cn("absolute size-5", className)}
+      style={{ transform: `rotate(${rotate}deg)` }}
+    >
+      <span className="absolute left-0 top-0 h-px w-4 bg-rose-500/80" />
+      <span className="absolute left-0 top-0 h-4 w-px bg-rose-500/80" />
     </div>
   );
 }

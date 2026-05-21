@@ -153,6 +153,11 @@ export type ChatOperation =
       regionalNotes?: string;
       benchmark?: string;
       narrative?: string;
+    }
+  | {
+      /** Switch the 3D view into first-person POV from a camera device. */
+      kind: "view-from-camera";
+      deviceId: string;
     };
 
 const DOMAIN_TOOLS: Anthropic.Messages.Tool[] = [
@@ -352,6 +357,16 @@ const DOMAIN_TOOLS: Anthropic.Messages.Tool[] = [
     },
   },
   {
+    name: "view_from_camera",
+    description:
+      "Switch the 3D view into first-person POV from a specific camera device — what that camera actually sees, framed by its FOV. Use when the user asks 'what does X see' or 'show me the POV of Y'.",
+    input_schema: {
+      type: "object",
+      properties: { deviceId: { type: "string" } },
+      required: ["deviceId"],
+    },
+  },
+  {
     name: "update_quote_settings",
     description:
       "Update one or more fields on the project quote: rates (laborRate, cablingPerCamera, cablingPerReader, commissioningFee, markupPct, taxPct), metadata (clientName, projectLocation, preparedBy, brandColor, printFooter), or narrative (regionalNotes, benchmark, narrative). Only include fields you actually want to change.",
@@ -420,6 +435,13 @@ QUOTE (shape the project quote — bill of materials, rates, line items):
   update_quote_settings   change rates, client info, brand color, regional
                           notes, narrative, etc.
 
+VIEW (UI navigation):
+  view_from_camera        flip the 3D scene into first-person POV from a
+                          specific camera. Use when the user asks "what
+                          does X see" / "show me X's view" / "POV that
+                          camera". Always also explain in text what they
+                          should look for.
+
 RESEARCH (server-side; results stream back as citations):
   web_search              search the web — use this when the user asks for
                           specific product pricing, current code requirements,
@@ -460,6 +482,30 @@ Multiple tool calls per turn are encouraged. Example:
   1–2 cameras; long corridors need one per ~12 m.
 • Use existing device ids (dev_xxx) and wall ids (wall_xxx) when modifying —
   never invent ids.
+
+═══ SUGGEST vs ACT ═══
+
+When the user asks "where should I put X?", "what would you do?", "any
+ideas?", or any other open-ended/advisory question, DO NOT auto-place
+devices. Instead, drop add_annotation markers with kind="idea" at each
+proposed location — one note per spot, with a one-sentence rationale.
+The user can then click a marker to act on it, or ask you to "apply"
+your suggestions.
+
+When the user gives a DIRECTIVE ("add a camera at the front door",
+"cover the corridor with motion sensors"), just do it — annotations
+would be friction.
+
+Warnings work similarly: if you notice a real issue while doing other
+work, drop add_annotation kind="warning" rather than burying it in text.
+
+═══ MEMORY ═══
+
+Earlier turns in this conversation may have been trimmed for token
+efficiency. If you see a "[Conversation recap — N earlier message(s)
+trimmed]" block in the user message, that's the summary of what already
+happened. Trust the floor state as ground truth; use the recap for
+context on intent and tone.
 
 ═══ SAFETY ═══
 
@@ -929,6 +975,12 @@ function toolUseToOperation(
       const index = Number(input.index);
       if (!Number.isInteger(index) || index < 0) return null;
       return { kind: "remove-quote-line-item", index };
+    }
+    case "view_from_camera": {
+      const deviceId =
+        typeof input.deviceId === "string" ? input.deviceId : "";
+      if (!deviceId) return null;
+      return { kind: "view-from-camera", deviceId };
     }
     case "update_quote_settings": {
       const op: ChatOperation = { kind: "update-quote-settings" };

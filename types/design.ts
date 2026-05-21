@@ -1,7 +1,7 @@
 export type Vec2 = { x: number; y: number };
 
 export type ViewMode = "2d" | "3d" | "sim";
-export type ThreeDMode = "orbit" | "walk";
+export type ThreeDMode = "orbit" | "walk" | "pov";
 
 export type DeviceType = "camera" | "reader" | "sensor" | "network";
 

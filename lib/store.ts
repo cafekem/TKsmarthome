@@ -97,6 +97,9 @@ interface DesignState {
       store the world-space drop point here. The 3D scene reads it as
       the walk-mode spawn, replacing the auto-computed default. */
   walkSpawnOverride: [number, number, number] | null;
+  /** When the user is in POV mode, this is the camera-device id whose POV
+      the 3D scene is rendering. Cleared when leaving POV. */
+  cameraPovTargetId: string | null;
   /** Which right-sidebar tab is showing — properties or the AI chat. */
   rightTab: "properties" | "ai";
   /**
@@ -140,6 +143,13 @@ interface DesignState {
   setAISurveyOpen(open: boolean): void;
   setAIAdvisorOpen(open: boolean): void;
   setWalkSpawnOverride(spawn: [number, number, number] | null): void;
+  /**
+   * Enter (or exit) camera-POV mode. Passing a device id sets the target
+   * and flips threeDMode to "pov"; passing null clears the target and
+   * returns the user to orbit.
+   */
+  enterCameraPov(deviceId: string): void;
+  exitCameraPov(): void;
   setRightTab(tab: "properties" | "ai"): void;
   pingAICursor(input: {
     x: number;
@@ -226,6 +236,7 @@ export const useDesignStore = create<DesignState>()(
         aiAdvisorOpen: false,
         visibility: DEFAULT_VISIBILITY,
         walkSpawnOverride: null,
+        cameraPovTargetId: null,
         rightTab: "properties",
         aiCursor: null,
 
@@ -304,6 +315,20 @@ export const useDesignStore = create<DesignState>()(
 
         setWalkSpawnOverride(spawn) {
           set({ walkSpawnOverride: spawn });
+        },
+
+        enterCameraPov(deviceId) {
+          // Auto-switch to the 3D view if we're not already there.
+          set({
+            cameraPovTargetId: deviceId,
+            threeDMode: "pov",
+            viewMode: "3d",
+            selectedDeviceId: deviceId,
+          });
+        },
+
+        exitCameraPov() {
+          set({ cameraPovTargetId: null, threeDMode: "orbit" });
         },
 
         setRightTab(tab) {

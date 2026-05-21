@@ -15,6 +15,7 @@ import { useSimStore } from "@/lib/sim-store";
 import type { Device, DeviceType, Floor, Wall } from "@/types/design";
 import { getProduct } from "@/lib/catalog";
 import { WalkController } from "./WalkController";
+import { CameraPovController } from "./CameraPovController";
 import { SimController } from "@/components/simulation/SimController";
 import { Actor3D } from "@/components/simulation/Actor3D";
 import { SubjectTrail3D } from "@/components/simulation/SubjectTrail3D";
@@ -49,6 +50,7 @@ export function Scene3DCanvas({
   const visibility = useDesignStore((s) => s.visibility);
   const threeDMode = useDesignStore((s) => s.threeDMode);
   const setThreeDMode = useDesignStore((s) => s.setThreeDMode);
+  const cameraPovTargetId = useDesignStore((s) => s.cameraPovTargetId);
   const addDevice = useDesignStore((s) => s.addDevice);
   const selectedDeviceId = useDesignStore((s) => s.selectedDeviceId);
   const selectDevice = useDesignStore((s) => s.selectDevice);
@@ -82,6 +84,15 @@ export function Scene3DCanvas({
 
   if (!floor || !frame) return null;
   const currentFloor = floor;
+
+  // Resolve the camera-POV target device, if any. We narrow to the camera
+  // type because POV positions itself using camera-only fields (FOV, range).
+  const povTarget =
+    cameraPovTargetId && threeDMode === "pov"
+      ? (floor.devices.find(
+          (d) => d.id === cameraPovTargetId && d.type === "camera",
+        ) as import("@/types/design").CameraDevice | undefined)
+      : undefined;
 
   const { center, span, cameraPos } = frame;
   const maxDim = Math.max(span.x, span.z, 6);
@@ -330,6 +341,8 @@ export function Scene3DCanvas({
               target={[center.x, 1, center.z]}
             />
           </>
+        ) : threeDMode === "pov" && povTarget ? (
+          <CameraPovController device={povTarget} scale={floor.scale} />
         ) : (
           <WalkController
             walls={floor.walls}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Lightbulb, StickyNote, Trash2, TriangleAlert } from "lucide-react";
+import { Eye, Lightbulb, StickyNote, Trash2, TriangleAlert } from "lucide-react";
 import {
   useActiveFloor,
   useCurrentDesign,
@@ -386,6 +386,17 @@ function DeviceForm({
       )}
 
       <Separator />
+
+      {device.type === "camera" && (
+        <Button
+          variant="outline"
+          className="w-full border-rose-500/30 text-rose-600 hover:bg-rose-500/[0.06] hover:text-rose-600"
+          onClick={() => useDesignStore.getState().enterCameraPov(device.id)}
+        >
+          <Eye className="size-4" />
+          View from this camera
+        </Button>
+      )}
 
       <Button
         variant="outline"
