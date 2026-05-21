@@ -20,6 +20,7 @@ import { getProduct } from "@/lib/catalog";
 import { distance, screenToDesign, snapToNearestWall } from "@/lib/geometry";
 import { useImage } from "./useImage";
 import { DeviceShape } from "./DeviceShape";
+import { AICursorOverlay } from "./AICursorOverlay";
 
 interface Canvas2DStageProps {
   width: number;
@@ -581,6 +582,11 @@ export function Canvas2DStage({
             ))}
         </Layer>
       </Stage>
+
+      {/* AI agent cursor — labelled marker that pings on every chat-driven
+          edit. Lives above the Konva Stage so it overlays the canvas
+          without participating in pointer events. */}
+      <AICursorOverlay viewTransform={viewTransform} />
 
       {pendingCalibration && (
         <CalibrationPrompt

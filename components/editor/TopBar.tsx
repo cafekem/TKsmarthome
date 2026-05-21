@@ -232,99 +232,33 @@ export function TopBar() {
  * coverage of an existing design). Both trigger state living in the design
  * store so the actual UI (dialog / drawer) is mounted at EditorShell level.
  */
+/**
+ * Single AI button — clicking it toggles the AI tab in the right sidebar.
+ * No dropdown, no flyout. Survey and Advisor are accessible from inside
+ * the chat's empty state ("From plan image" / "Analyze coverage" buttons).
+ */
 function AIMenu() {
-  const [open, setOpen] = useState(false);
-  const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
-  const setAIAdvisorOpen = useDesignStore((s) => s.setAIAdvisorOpen);
-  const setAIChatOpen = useDesignStore((s) => s.setAIChatOpen);
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[0.8rem] font-medium text-primary transition-colors hover:bg-primary/10"
-        aria-label="AI features"
-      >
-        <Sparkles className="size-3.5" strokeWidth={1.8} />
-        <span className="hidden sm:inline">AI</span>
-        <ChevronDown className="size-3 ml-0.5 opacity-70" />
-      </button>
-      {open && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setOpen(false)}
-          />
-          <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-lg border border-border bg-popover p-1 shadow-lg">
-            <AIMenuItem
-              title="Chat with AI editor"
-              description="Talk to Claude — it adds, moves, tweaks devices for you."
-              shortcut="⌘K"
-              onClick={() => {
-                setOpen(false);
-                setAIChatOpen(true);
-              }}
-            />
-            <div className="my-1 border-t border-border/50" />
-            <AIMenuItem
-              title="Generate design from plan"
-              description="Upload a floor plan, get walls + devices."
-              onClick={() => {
-                setOpen(false);
-                setAISurveyOpen(true);
-              }}
-            />
-            <AIMenuItem
-              title="Analyze coverage"
-              description="Find blind spots, redundancies, compliance gaps."
-              onClick={() => {
-                setOpen(false);
-                setAIAdvisorOpen(true);
-              }}
-            />
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function AIMenuItem({
-  title,
-  description,
-  shortcut,
-  onClick,
-}: {
-  title: string;
-  description: string;
-  shortcut?: string;
-  onClick: () => void;
-}) {
+  const rightTab = useDesignStore((s) => s.rightTab);
+  const setRightTab = useDesignStore((s) => s.setRightTab);
+  const active = rightTab === "ai";
   return (
     <button
       type="button"
-      onClick={onClick}
-      className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted/60"
+      onClick={() => setRightTab(active ? "properties" : "ai")}
+      className={
+        "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[0.8rem] font-medium transition-colors " +
+        (active
+          ? "bg-primary/12 text-primary"
+          : "text-primary hover:bg-primary/10")
+      }
+      aria-pressed={active}
+      title={active ? "Hide AI chat" : "Open AI chat (⌘K)"}
     >
-      <Sparkles
-        className="mt-0.5 size-3.5 shrink-0 text-primary"
-        strokeWidth={1.8}
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-[0.82rem] font-medium tracking-[-0.005em]">
-            {title}
-          </div>
-          {shortcut && (
-            <kbd className="rounded border border-border/40 bg-background/40 px-1 py-px font-mono text-[10px] text-muted-foreground">
-              {shortcut}
-            </kbd>
-          )}
-        </div>
-        <div className="text-[0.7rem] text-muted-foreground leading-snug">
-          {description}
-        </div>
-      </div>
+      <Sparkles className="size-3.5" strokeWidth={1.9} />
+      <span className="hidden sm:inline">AI</span>
+      <kbd className="ml-0.5 hidden rounded border border-border/40 bg-background/40 px-1 py-px font-mono text-[10px] text-muted-foreground sm:inline">
+        ⌘K
+      </kbd>
     </button>
   );
 }

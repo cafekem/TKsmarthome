@@ -24,13 +24,13 @@ export function applySurveyToActiveFloor(
   const floor = design.floors.find((f) => f.id === design.activeFloorId);
   if (!floor) return { wallsAdded: 0, devicesAdded: 0 };
 
-  // 1. Update the floor with the plan image + scale, and clear existing
-  //    walls/devices so the AI proposal is a clean apply.
+  // 1. Update the floor with the plan image + scale. Walls are replaced by
+  //    the new trace; devices are PRESERVED so the user doesn't lose work
+  //    if they re-run the survey after placing equipment.
   store.updateFloor(floor.id, {
     planImage: planImageDataUrl,
     scale: survey.scalePxPerMeter,
     walls: [],
-    devices: [],
   });
 
   // 2. Add proposed walls

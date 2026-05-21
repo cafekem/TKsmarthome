@@ -4,14 +4,13 @@ import { useEffect, useState } from "react";
 import { useDesignStore } from "@/lib/store";
 import { TopBar } from "./TopBar";
 import { LibraryPanel } from "./LibraryPanel";
-import { PropertiesPanel } from "./PropertiesPanel";
+import { RightSidebar } from "./RightSidebar";
 import { StatusBar } from "./StatusBar";
 import { Canvas2D } from "@/components/canvas2d/Canvas2D";
 import { Scene3D } from "@/components/scene3d/Scene3D";
 import { SimView } from "@/components/simulation/SimView";
 import { AISurveyDialog } from "@/components/ai/AISurveyDialog";
 import { AIAdvisorPanel } from "@/components/ai/AIAdvisorPanel";
-import { AIChatPanel } from "@/components/ai/AIChatPanel";
 
 function useHasHydrated() {
   const [hydrated, setHydrated] = useState(false);
@@ -30,8 +29,8 @@ export function EditorShell({ designId }: { designId: string }) {
   const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
   const aiAdvisorOpen = useDesignStore((s) => s.aiAdvisorOpen);
   const setAIAdvisorOpen = useDesignStore((s) => s.setAIAdvisorOpen);
-  const aiChatOpen = useDesignStore((s) => s.aiChatOpen);
-  const setAIChatOpen = useDesignStore((s) => s.setAIChatOpen);
+  const rightTab = useDesignStore((s) => s.rightTab);
+  const setRightTab = useDesignStore((s) => s.setRightTab);
   const hydrated = useHasHydrated();
 
   useEffect(() => {
@@ -45,18 +44,19 @@ export function EditorShell({ designId }: { designId: string }) {
     setViewMode("2d");
   }, [designId, ensureDesign, setCurrent, setViewMode, hydrated]);
 
-  // ⌘K / Ctrl-K opens (or closes) the AI chat panel. We listen at the window
-  // so any focused element can be interrupted by the shortcut.
+  // ⌘K / Ctrl-K toggles between the Properties and AI tabs in the right
+  // sidebar. We listen at the window so any focused element can be
+  // interrupted by the shortcut.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setAIChatOpen(!aiChatOpen);
+        setRightTab(rightTab === "ai" ? "properties" : "ai");
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [aiChatOpen, setAIChatOpen]);
+  }, [rightTab, setRightTab]);
 
   if (!hydrated) {
     return <div className="flex h-screen items-center justify-center" />;
@@ -75,7 +75,7 @@ export function EditorShell({ designId }: { designId: string }) {
           {mode === "sim" && <SimView />}
         </div>
         <div className="w-80 shrink-0">
-          <PropertiesPanel />
+          <RightSidebar />
         </div>
       </div>
       <StatusBar />
@@ -87,7 +87,6 @@ export function EditorShell({ designId }: { designId: string }) {
         open={aiAdvisorOpen}
         onClose={() => setAIAdvisorOpen(false)}
       />
-      <AIChatPanel open={aiChatOpen} onClose={() => setAIChatOpen(false)} />
     </div>
   );
 }

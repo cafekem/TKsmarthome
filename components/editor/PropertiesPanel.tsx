@@ -48,7 +48,7 @@ export function PropertiesPanel() {
     : (floor?.doors ?? []).find((d) => d.id === selectedId) ?? null;
 
   return (
-    <aside className="flex h-full w-full flex-col border-l border-border/70 bg-sidebar">
+    <div className="flex h-full w-full flex-col bg-sidebar">
       <div className="flex items-center justify-between border-b border-border/70 px-4 py-3.5">
         <div className="flex flex-col">
           <div className="text-[0.92rem] font-semibold tracking-[-0.01em] text-foreground">
@@ -130,7 +130,7 @@ export function PropertiesPanel() {
           )}
         </div>
       </ScrollArea>
-    </aside>
+    </div>
   );
 }
 

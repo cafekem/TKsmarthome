@@ -92,13 +92,10 @@ export function AISurveyDialog({ open, onClose }: Props) {
         buildingType: buildingType.trim() || undefined,
         projectNotes: projectNotes.trim() || undefined,
       });
-      const { wallsAdded, devicesAdded } = applySurveyToActiveFloor(
-        survey,
-        meta.base64,
-      );
+      const { wallsAdded } = applySurveyToActiveFloor(survey, meta.base64);
       setPhase("done");
-      toast.success("AI survey applied", {
-        description: `Generated ${wallsAdded} walls and ${devicesAdded} devices. Edit anything you want — your design is fully editable.`,
+      toast.success("Walls traced", {
+        description: `Generated ${wallsAdded} wall${wallsAdded === 1 ? "" : "s"}. Drag devices from the library, or ask the AI chat to place them for you.`,
       });
       // Auto-close after a brief moment so user can see the result
       window.setTimeout(() => onClose(), 1400);
@@ -132,10 +129,10 @@ export function AISurveyDialog({ open, onClose }: Props) {
             </div>
             <div>
               <div className="text-[0.95rem] font-semibold tracking-[-0.01em]">
-                Generate design with AI
+                Trace walls from a plan
               </div>
               <div className="text-[0.74rem] text-muted-foreground">
-                Upload a floor plan — Claude proposes walls and devices.
+                Upload a floor plan — Claude draws the walls. You add devices.
               </div>
             </div>
           </div>
@@ -234,9 +231,9 @@ export function AISurveyDialog({ open, onClose }: Props) {
                 <span className="font-medium text-amber-700 dark:text-amber-300">
                   Heads up:
                 </span>{" "}
-                running this will replace any walls and devices on the active
-                floor. The output is a starting point — you should review and
-                refine it.
+                running this replaces the walls on the active floor. Your
+                placed devices stay where they are. The traced walls are a
+                starting point — refine anything that's off.
               </div>
             </div>
           )}

@@ -102,46 +102,6 @@ const TOOLS: Anthropic.Messages.Tool[] = [
     },
   },
   {
-    name: "propose_device",
-    description:
-      "Add one device to the design. Coordinates are in IMAGE PIXELS. Place devices realistically: cameras at corners and entry points, readers next to doors, motion sensors in hallways and main rooms, an access point centrally in each major room. Rotation is in degrees (0 = facing right/east, 90 = facing down/south).",
-    input_schema: {
-      type: "object",
-      properties: {
-        type: {
-          type: "string",
-          enum: ["camera", "reader", "sensor", "network"],
-        },
-        subtype: {
-          type: "string",
-          description:
-            "Camera: dome|bullet|ptz|fisheye|multi-sensor. Reader: card|biometric|keypad. Sensor: motion|glass-break|door-contact|smoke. Network: access-point|switch|nvr.",
-        },
-        x: { type: "number" },
-        y: { type: "number" },
-        rotationDegrees: { type: "number" },
-        label: {
-          type: "string",
-          description:
-            "A short human label, e.g. 'Lobby cam', 'Front entry reader', 'Server room motion'.",
-        },
-        rangeMeters: {
-          type: "number",
-          description: "FOV range in meters (cameras: ~12m, sensors: ~8m).",
-        },
-        fovDegrees: {
-          type: "number",
-          description: "Field of view in degrees (cameras 90°, PTZ 60°).",
-        },
-        rationale: {
-          type: "string",
-          description: "One sentence why this device goes here.",
-        },
-      },
-      required: ["type", "x", "y", "rotationDegrees", "label", "rationale"],
-    },
-  },
-  {
     name: "finalize",
     description:
       "Call this last to provide a brief summary paragraph (2-3 sentences) describing the overall design and its coverage strategy.",
@@ -155,23 +115,15 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   },
 ];
 
-const SYSTEM_PROMPT = `You are a senior security-systems designer creating a first-pass site survey for DeeperVision, a CAD tool for commercial security installs.
+const SYSTEM_PROMPT = `You are a senior security-systems designer turning a floor plan image into a clean WALL TRACE for DeeperVision, a CAD tool for commercial security installs.
 
-You are given a floor plan image. Your job:
+You are given a floor plan image. Your ONLY job for this survey is:
 
 1. Call set_scale FIRST to estimate pixels-per-meter from visible clues.
-2. Call propose_wall for every wall segment you see (exterior + interior). Be thorough — the user will use this to draw the 3D model.
-3. Call propose_device for the devices needed:
-   - Cameras at every entry/exit, at corners of large rooms, watching corridors
-   - Readers next to every controlled door
-   - Motion sensors in hallways and high-traffic rooms
-   - Glass-break sensors near windows in sensitive areas
-   - Door-contact sensors on perimeter doors
-   - One access-point centrally in each major room or every ~12 m
-   - An NVR in any visible server/IT room
-4. Call finalize with a brief summary.
+2. Call propose_wall for every wall segment you see (exterior + interior). Be thorough — the user will use this trace to design their security system.
+3. Call finalize with a brief one-sentence summary of the layout.
 
-Be opinionated. Aim for ~80% coverage with reasonable overlap, not 100%. Don't over-instrument: a small office needs 4-8 cameras, not 30. Place devices at REALISTIC locations a human installer would choose — wall corners, near doors, mounted ~2.5-2.8m up the wall.
+DO NOT call propose_device. The user adds cameras, readers, sensors, and network gear themselves — either by dragging from the library or by asking the AI editor in the chat panel. Your job here is ONLY the walls + scale.
 
 ═══════════════════════════════════════════════════════════════════════
 COORDINATE RULES — CRITICAL, READ CAREFULLY

@@ -90,12 +90,27 @@ interface DesignState {
   quoteSettings: QuoteSettings;
   aiSurveyOpen: boolean;
   aiAdvisorOpen: boolean;
-  aiChatOpen: boolean;
   visibility: VisibilityFilter;
   /** When the user drops the "Pegman" character on the 3D scene, we
       store the world-space drop point here. The 3D scene reads it as
       the walk-mode spawn, replacing the auto-computed default. */
   walkSpawnOverride: [number, number, number] | null;
+  /** Which right-sidebar tab is showing — properties or the AI chat. */
+  rightTab: "properties" | "ai";
+  /**
+   * Transient marker: the AI agent's "cursor" position on the 2D canvas.
+   * When the chat applies an op, we briefly broadcast its target position
+   * so the canvas can render a labelled ping where Claude is "working".
+   * The label describes the action ("Placing camera", "Moving device", …).
+   * Cleared automatically ~1s after each ping.
+   */
+  aiCursor: {
+    x: number;
+    y: number;
+    label: string;
+    tone: "add" | "move" | "remove" | "edit" | "search";
+    nonce: number;
+  } | null;
 
   ensureDesign(id: string): DesignDocument;
   setCurrentDesign(id: string): void;
@@ -111,8 +126,15 @@ interface DesignState {
   setViewTransform(t: ViewTransform): void;
   setAISurveyOpen(open: boolean): void;
   setAIAdvisorOpen(open: boolean): void;
-  setAIChatOpen(open: boolean): void;
   setWalkSpawnOverride(spawn: [number, number, number] | null): void;
+  setRightTab(tab: "properties" | "ai"): void;
+  pingAICursor(input: {
+    x: number;
+    y: number;
+    label: string;
+    tone: "add" | "move" | "remove" | "edit" | "search";
+  }): void;
+  clearAICursor(): void;
   toggleDeviceTypeVisible(type: DeviceType): void;
   toggleInstallStatusVisible(status: InstallStatus): void;
   /** Bulk-reset to all-on (proposed+installed by default; decommissioned off). */
@@ -167,9 +189,10 @@ export const useDesignStore = create<DesignState>()(
         quoteSettings: DEFAULT_QUOTE_SETTINGS,
         aiSurveyOpen: false,
         aiAdvisorOpen: false,
-        aiChatOpen: false,
         visibility: DEFAULT_VISIBILITY,
         walkSpawnOverride: null,
+        rightTab: "properties",
+        aiCursor: null,
 
         ensureDesign(id) {
           const existing = get().designs[id];
@@ -244,12 +267,22 @@ export const useDesignStore = create<DesignState>()(
           set({ aiAdvisorOpen: open });
         },
 
-        setAIChatOpen(open) {
-          set({ aiChatOpen: open });
-        },
-
         setWalkSpawnOverride(spawn) {
           set({ walkSpawnOverride: spawn });
+        },
+
+        setRightTab(tab) {
+          set({ rightTab: tab });
+        },
+
+        pingAICursor({ x, y, label, tone }) {
+          set({
+            aiCursor: { x, y, label, tone, nonce: Date.now() + Math.random() },
+          });
+        },
+
+        clearAICursor() {
+          set({ aiCursor: null });
         },
 
         toggleDeviceTypeVisible(type) {
