@@ -12,7 +12,7 @@ export function TopNav() {
             <Eye className="size-3.5 text-primary" />
           </div>
           <span className="font-medium tracking-[-0.01em] text-[0.97rem]">
-            Deeper Vision
+            DeeperVision
           </span>
         </Link>
         <nav className="flex items-center gap-1 sm:gap-1.5 text-sm">

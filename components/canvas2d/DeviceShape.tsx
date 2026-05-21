@@ -22,6 +22,16 @@ const COLORS = {
   network: "#a78bfa",
 } as const;
 
+/** Distinct colors for each lens in a multi-sensor camera */
+const MULTI_SENSOR_COLORS = [
+  "#34d399", // green
+  "#38bdf8", // blue
+  "#f97316", // orange
+  "#e879f9", // pink
+  "#facc15", // yellow
+  "#2dd4bf", // teal
+] as const;
+
 export function DeviceShape({
   device,
   scalePxPerMeter,
@@ -62,7 +72,24 @@ export function DeviceShape({
         if (stage) stage.container().style.cursor = "default";
       }}
     >
-      {showCoverage && device.type === "camera" && (
+      {showCoverage && device.type === "camera" && device.lenses && device.lenses.length > 0
+        ? device.lenses.map((lens, i) => {
+            const lensRotation = rotation + lens.rotationOffset;
+            return (
+              <Wedge
+                key={lens.id}
+                x={0}
+                y={0}
+                radius={lens.rangeMeters * scalePxPerMeter}
+                angle={lens.fovDegrees}
+                rotation={(lensRotation * 180) / Math.PI - lens.fovDegrees / 2}
+                fill={MULTI_SENSOR_COLORS[i % MULTI_SENSOR_COLORS.length]}
+                opacity={selected ? 0.22 : 0.13}
+                listening={false}
+              />
+            );
+          })
+        : showCoverage && device.type === "camera" && (
         <Wedge
           x={0}
           y={0}

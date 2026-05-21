@@ -13,6 +13,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import type { CameraDevice, Device } from "@/types/design";
+import { getProduct } from "@/lib/catalog";
+import { formatUSD } from "@/lib/pricing";
 
 function pickValue(v: number | readonly number[]): number {
   return Array.isArray(v) ? v[0] : (v as number);
@@ -156,8 +158,30 @@ function DeviceForm({
   onChange: (partial: Partial<Device>) => void;
   onDelete: () => void;
 }) {
+  const catalogProduct = device.catalogId ? getProduct(device.catalogId) : null;
+
   return (
     <div className="space-y-5">
+      {catalogProduct && (
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+          <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-primary/70">
+            {catalogProduct.manufacturer}
+          </div>
+          <div className="mt-0.5 text-[0.88rem] font-medium tracking-[-0.01em]">
+            {catalogProduct.model}
+          </div>
+          <div className="mt-0.5 text-[0.72rem] text-muted-foreground">
+            {catalogProduct.description}
+          </div>
+          <div className="mt-1.5 flex items-baseline gap-2 text-[0.7rem]">
+            <span className="font-mono font-medium">{formatUSD(catalogProduct.streetPrice)}</span>
+            <span className="text-muted-foreground/60">street</span>
+            <span className="font-mono text-muted-foreground/50">{formatUSD(catalogProduct.msrp)}</span>
+            <span className="text-muted-foreground/60">MSRP</span>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground">Label</Label>
         <Input
@@ -301,6 +325,99 @@ function CameraExtras({
   device: CameraDevice;
   onChange: (partial: Partial<CameraDevice>) => void;
 }) {
+  const hasLenses = device.lenses && device.lenses.length > 0;
+
+  function updateLens(lensId: string, partial: Record<string, number>) {
+    if (!device.lenses) return;
+    const updated = device.lenses.map((l) =>
+      l.id === lensId ? { ...l, ...partial } : l
+    );
+    onChange({ lenses: updated });
+  }
+
+  if (hasLenses) {
+    return (
+      <>
+        <Separator />
+        <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Lenses ({device.lenses!.length})
+        </div>
+        {device.lenses!.map((lens, i) => (
+          <div
+            key={lens.id}
+            className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-3"
+          >
+            <div className="text-[0.72rem] font-medium">
+              <span
+                className="mr-1.5 inline-block size-2 rounded-full"
+                style={{ backgroundColor: LENS_COLORS[i % LENS_COLORS.length] }}
+              />
+              {lens.label}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">FOV (°)</Label>
+              <div className="flex items-center gap-3">
+                <Slider
+                  min={20}
+                  max={180}
+                  step={1}
+                  value={[lens.fovDegrees]}
+                  onValueChange={(v) =>
+                    updateLens(lens.id, { fovDegrees: pickValue(v) })
+                  }
+                  className="flex-1"
+                />
+                <div className="font-mono text-[0.75rem] w-10 text-right">
+                  {lens.fovDegrees}°
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Range (m)</Label>
+              <div className="flex items-center gap-3">
+                <Slider
+                  min={1}
+                  max={60}
+                  step={0.5}
+                  value={[lens.rangeMeters]}
+                  onValueChange={(v) =>
+                    updateLens(lens.id, { rangeMeters: pickValue(v) })
+                  }
+                  className="flex-1"
+                />
+                <div className="font-mono text-[0.75rem] w-10 text-right">
+                  {lens.rangeMeters.toFixed(1)}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Direction offset (°)
+              </Label>
+              <div className="flex items-center gap-3">
+                <Slider
+                  min={0}
+                  max={360}
+                  step={5}
+                  value={[Math.round((lens.rotationOffset * 180) / Math.PI) % 360]}
+                  onValueChange={(v) =>
+                    updateLens(lens.id, {
+                      rotationOffset: (pickValue(v) * Math.PI) / 180,
+                    })
+                  }
+                  className="flex-1"
+                />
+                <div className="font-mono text-[0.75rem] w-10 text-right">
+                  {Math.round((lens.rotationOffset * 180) / Math.PI) % 360}°
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </>
+    );
+  }
+
   return (
     <>
       <div className="space-y-2">
@@ -338,3 +455,5 @@ function CameraExtras({
     </>
   );
 }
+
+const LENS_COLORS = ["#34d399", "#38bdf8", "#f97316", "#e879f9", "#facc15", "#2dd4bf"];

@@ -1,12 +1,11 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Deeper Vision wordmark icon: a rounded camera viewport with an internal
- * iris (suggesting a real lens), three faint aperture blades for mechanical
- * detail, and a centered pupil with a small highlight for a sense of depth.
+ * DeeperVision logo mark: a layered depth symbol — three nested
+ * chevrons/layers stacked in perspective, suggesting depth perception,
+ * spatial understanding, and "seeing deeper" into 3D space.
  *
- * Reads as both "a camera lens" and "an eye looking deeper" at any size —
- * we use it from 14px (footer) up to 96px (hero badge).
+ * Clean geometric construction that scales from 14px (footer) to 96px (hero).
  */
 export function LogoMark({
   className,
@@ -23,45 +22,33 @@ export function LogoMark({
       className={cn("size-full", className)}
       aria-hidden="true"
     >
-      {/* Outer rounded viewport — the housing of a security camera */}
-      <rect
-        x="2.5"
-        y="2.5"
-        width="19"
-        height="19"
-        rx="5.2"
+      {/* Three stacked depth layers — convey "deeper" and spatial/3D vision.
+          Each chevron is progressively smaller, creating a tunnel perspective effect. */}
+      <path
+        d="M4 6 L12 12 L20 6"
         stroke="currentColor"
         strokeWidth={strokeWidth}
-      />
-
-      {/* Inner ring — the lens iris */}
-      <circle
-        cx="12"
-        cy="12"
-        r="5.4"
-        stroke="currentColor"
-        strokeWidth={strokeWidth * 0.78}
-      />
-
-      {/* Aperture blades — three faint lines crossing the iris so it reads
-         as a real mechanical aperture, not just a generic eye */}
-      <g
-        stroke="currentColor"
-        strokeWidth={strokeWidth * 0.42}
         strokeLinecap="round"
-        opacity="0.5"
-      >
-        <line x1="12" y1="6.6" x2="12" y2="17.4" />
-        <line x1="7.3" y1="9.3" x2="16.7" y2="14.7" />
-        <line x1="7.3" y1="14.7" x2="16.7" y2="9.3" />
-      </g>
-
-      {/* Pupil dot */}
-      <circle cx="12" cy="12" r="2.1" fill="currentColor" />
-
-      {/* Catchlight — tiny reflection on the pupil, gives the mark life
-         and reinforces the "looking into a real 3D space" idea */}
-      <circle cx="11.2" cy="11.2" r="0.55" fill="#ffffff" opacity="0.95" />
+        strokeLinejoin="round"
+        opacity="0.35"
+      />
+      <path
+        d="M6 10 L12 14.5 L18 10"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.6"
+      />
+      <path
+        d="M8 14 L12 17 L16 14"
+        stroke="currentColor"
+        strokeWidth={strokeWidth * 1.1}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Focus dot at the convergence point — the "deeper" target */}
+      <circle cx="12" cy="20" r="1.2" fill="currentColor" opacity="0.8" />
     </svg>
   );
 }
@@ -98,7 +85,7 @@ export function Logo({
             textClassName
           )}
         >
-          Deeper Vision
+          DeeperVision
         </span>
       )}
     </span>

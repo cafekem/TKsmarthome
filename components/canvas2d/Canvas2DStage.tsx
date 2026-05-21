@@ -7,6 +7,7 @@ import type { KonvaEventObject } from "konva/lib/Node";
 import { toast } from "sonner";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
 import type { DeviceType, Vec2 } from "@/types/design";
+import { getProduct } from "@/lib/catalog";
 import { distance, screenToDesign } from "@/lib/geometry";
 import { useImage } from "./useImage";
 import { DeviceShape } from "./DeviceShape";
@@ -184,9 +185,10 @@ export function Canvas2DStage({
     const raw = e.dataTransfer.getData("application/x-dv-device");
     if (!raw) return;
     try {
-      const payload = JSON.parse(raw) as { type: DeviceType };
+      const payload = JSON.parse(raw) as { type: DeviceType; catalogId?: string };
       const point = getDesignPoint(e.clientX, e.clientY);
-      addDevice(floor.id, payload.type, point);
+      const product = payload.catalogId ? getProduct(payload.catalogId) : undefined;
+      addDevice(floor.id, payload.type, point, product);
     } catch {
       // ignore
     }

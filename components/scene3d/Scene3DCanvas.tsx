@@ -13,6 +13,7 @@ import { useTheme } from "next-themes";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
 import { useSimStore } from "@/lib/sim-store";
 import type { Device, DeviceType, Floor, Wall } from "@/types/design";
+import { getProduct } from "@/lib/catalog";
 import { WalkController } from "./WalkController";
 import { SimController } from "@/components/simulation/SimController";
 import { Actor3D } from "@/components/simulation/Actor3D";
@@ -119,10 +120,11 @@ export function Scene3DCanvas({
     const raw = e.dataTransfer.getData("application/x-dv-device");
     if (!raw) return;
     try {
-      const payload = JSON.parse(raw) as { type: DeviceType };
+      const payload = JSON.parse(raw) as { type: DeviceType; catalogId?: string };
       const px = dropPointToPx(e.clientX, e.clientY);
       if (!px) return;
-      addDevice(currentFloor.id, payload.type, px);
+      const product = payload.catalogId ? getProduct(payload.catalogId) : undefined;
+      addDevice(currentFloor.id, payload.type, px, product);
     } catch {
       // ignore
     }

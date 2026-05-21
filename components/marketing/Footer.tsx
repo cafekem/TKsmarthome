@@ -8,7 +8,7 @@ export function Footer() {
           <span className="flex size-4 items-center justify-center text-primary">
             <LogoMark strokeWidth={1.8} />
           </span>
-          <span className="font-medium text-foreground/90">Deeper Vision</span>
+          <span className="font-medium text-foreground/90">DeeperVision</span>
           <span className="opacity-50">·</span>
           <span>
             Built for security integrators who want to ship{" "}

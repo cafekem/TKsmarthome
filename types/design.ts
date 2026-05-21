@@ -5,18 +5,36 @@ export type ThreeDMode = "orbit" | "walk";
 
 export type DeviceType = "camera" | "reader" | "sensor" | "network";
 
-export type CameraSubtype = "fixed" | "ptz" | "dome" | "fisheye";
-export type ReaderSubtype = "card" | "biometric" | "keypad";
-export type SensorSubtype = "motion" | "glass-break" | "door-contact" | "smoke";
+export type CameraSubtype = "fixed" | "ptz" | "dome" | "fisheye" | "bullet" | "multi-sensor" | "mini" | "modular";
+export type ReaderSubtype = "card" | "biometric" | "keypad" | "controller" | "lock";
+export type SensorSubtype = "motion" | "glass-break" | "door-contact" | "smoke" | "heat" | "notification";
 export type NetworkSubtype = "switch" | "access-point" | "nvr";
 
 export interface DeviceBase {
   id: string;
+  catalogId?: string;
   position: Vec2;
   rotation: number;
   mountHeight: number;
   label: string;
   notes: string;
+}
+
+/**
+ * Individual lens on a multi-sensor camera. Each lens has its own FOV,
+ * range, and rotation offset relative to the device's base rotation.
+ * For single-lens cameras, the `lenses` array is omitted and the
+ * top-level fovDegrees/rangeMeters are used directly.
+ */
+export interface CameraLens {
+  id: string;
+  label: string;
+  fovDegrees: number;
+  rangeMeters: number;
+  /** Rotation offset in radians relative to the device's base rotation */
+  rotationOffset: number;
+  irRange?: number;
+  resolution?: string;
 }
 
 export interface CameraDevice extends DeviceBase {
@@ -27,6 +45,8 @@ export interface CameraDevice extends DeviceBase {
   rangeMeters: number;
   irRange?: number;
   resolution?: string;
+  /** Multi-sensor cameras have multiple lenses with independent FOV/rotation */
+  lenses?: CameraLens[];
 }
 
 export interface ReaderDevice extends DeviceBase {

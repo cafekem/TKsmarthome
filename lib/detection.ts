@@ -76,25 +76,44 @@ export function computeDetection({
   for (const cam of cameras) {
     const dxPx = actorPosition.x - cam.position.x;
     const dyPx = actorPosition.y - cam.position.y;
-    const distM = Math.hypot(dxPx, dyPx) / scalePxPerMeter;
+    const toActorLen = Math.hypot(dxPx, dyPx);
+
+    // For multi-sensor cameras, check each lens independently
+    if (cam.lenses && cam.lenses.length > 0) {
+      let anyLensDetects = false;
+      for (const lens of cam.lenses) {
+        const distM = toActorLen / scalePxPerMeter;
+        if (distM > lens.rangeMeters) continue;
+
+        const lensRotation = cam.rotation + lens.rotationOffset;
+        const lensDir = { x: Math.cos(lensRotation), y: Math.sin(lensRotation) };
+        if (toActorLen === 0) { anyLensDetects = true; break; }
+        const cosAngle = (lensDir.x * dxPx + lensDir.y * dyPx) / toActorLen;
+        const halfFov = (lens.fovDegrees / 2) * (Math.PI / 180);
+        if (cosAngle < Math.cos(halfFov)) continue;
+
+        if (!lineOfSight(cam.position, actorPosition, walls)) continue;
+        anyLensDetects = true;
+        break;
+      }
+      if (anyLensDetects) detectingCameras.add(cam.id);
+      continue;
+    }
+
+    // Single-lens camera (original logic)
+    const distM = toActorLen / scalePxPerMeter;
     if (distM > cam.rangeMeters) continue;
 
-    // FOV angle test: angle from camera's facing direction to the actor.
     const camDir = { x: Math.cos(cam.rotation), y: Math.sin(cam.rotation) };
-    const toActor = { x: dxPx, y: dyPx };
-    const toActorLen = Math.hypot(toActor.x, toActor.y);
     if (toActorLen === 0) {
       detectingCameras.add(cam.id);
       continue;
     }
-    const cosAngle =
-      (camDir.x * toActor.x + camDir.y * toActor.y) / toActorLen;
+    const cosAngle = (camDir.x * dxPx + camDir.y * dyPx) / toActorLen;
     const halfFov = (cam.fovDegrees / 2) * (Math.PI / 180);
     if (cosAngle < Math.cos(halfFov)) continue;
 
-    // Line of sight (walls block)
     if (!lineOfSight(cam.position, actorPosition, walls)) continue;
-
     detectingCameras.add(cam.id);
   }
 

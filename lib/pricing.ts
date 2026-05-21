@@ -1,169 +1,65 @@
 import type {
   Device,
   Floor,
-  CameraDevice,
-  NetworkDeviceBase,
-  ReaderDevice,
-  SensorDevice,
 } from "@/types/design";
-
-/**
- * Pricing catalog. Numbers are mid-market US-distributor estimates — they're
- * meant to be configurable per integrator, but they're plausible enough that
- * a quote generated with them on a typical small-office design lands in the
- * ballpark of an actual proposal.
- *
- * Editing strategy: an integrator who wants their own numbers can either
- * fork this file or, at runtime, override the rates that live in the
- * QuoteSettings store (labor rate, cabling, commissioning, tax). Per-model
- * unit prices are intentionally NOT user-editable in the UI yet — that's
- * the next milestone (a "Pricing settings" page).
- */
+import { getProduct } from "./catalog";
 
 export interface ModelEntry {
   id: string;
   displayName: string;
   vendor: string;
-  /** Hardware unit price in USD (distributor → integrator) */
   unitPrice: number;
-  /** Installation labor estimate in hours */
   laborHours: number;
 }
 
-export const CAMERA_MODELS: Record<
-  "dome" | "ptz" | "fixed" | "fisheye",
-  ModelEntry
-> = {
-  dome: {
-    id: "dome-4mp",
-    displayName: "Indoor Dome — 4MP IR",
-    vendor: "Hikvision-class",
-    unitPrice: 280,
-    laborHours: 1.5,
-  },
-  ptz: {
-    id: "ptz-4k",
-    displayName: "PTZ — 4K 25× zoom",
-    vendor: "Axis-class",
-    unitPrice: 1480,
-    laborHours: 2.5,
-  },
-  fixed: {
-    id: "fixed-4mp",
-    displayName: "Outdoor Bullet — 4MP IR",
-    vendor: "Hikvision-class",
-    unitPrice: 320,
-    laborHours: 1.75,
-  },
-  fisheye: {
-    id: "fisheye-12mp",
-    displayName: "Fisheye 360° — 12MP",
-    vendor: "Hanwha-class",
-    unitPrice: 640,
-    laborHours: 1.5,
-  },
+const FALLBACK_MODELS: Record<string, ModelEntry> = {
+  dome:           { id: "dome-generic",    displayName: "Dome Camera",           vendor: "Generic", unitPrice: 280,  laborHours: 1.5  },
+  bullet:         { id: "bullet-generic",  displayName: "Bullet Camera",         vendor: "Generic", unitPrice: 320,  laborHours: 1.75 },
+  ptz:            { id: "ptz-generic",     displayName: "PTZ Camera",            vendor: "Generic", unitPrice: 1480, laborHours: 2.5  },
+  fixed:          { id: "fixed-generic",   displayName: "Fixed Camera",          vendor: "Generic", unitPrice: 320,  laborHours: 1.75 },
+  fisheye:        { id: "fisheye-generic", displayName: "Fisheye Camera",        vendor: "Generic", unitPrice: 640,  laborHours: 1.5  },
+  "multi-sensor": { id: "multi-generic",   displayName: "Multi-Sensor Camera",   vendor: "Generic", unitPrice: 1800, laborHours: 3.0  },
+  mini:           { id: "mini-generic",    displayName: "Mini Camera",           vendor: "Generic", unitPrice: 350,  laborHours: 1.0  },
+  modular:        { id: "modular-generic", displayName: "Modular Camera",        vendor: "Generic", unitPrice: 280,  laborHours: 1.0  },
+  card:           { id: "card-generic",    displayName: "Card Reader",           vendor: "Generic", unitPrice: 170,  laborHours: 1.25 },
+  biometric:      { id: "bio-generic",     displayName: "Biometric Reader",      vendor: "Generic", unitPrice: 520,  laborHours: 1.75 },
+  keypad:         { id: "keypad-generic",  displayName: "Keypad Reader",         vendor: "Generic", unitPrice: 120,  laborHours: 1.25 },
+  controller:     { id: "ctrl-generic",    displayName: "Door Controller",       vendor: "Generic", unitPrice: 680,  laborHours: 2.0  },
+  lock:           { id: "lock-generic",    displayName: "Electronic Lock",       vendor: "Generic", unitPrice: 380,  laborHours: 1.5  },
+  motion:         { id: "motion-generic",  displayName: "Motion Sensor",         vendor: "Generic", unitPrice: 45,   laborHours: 0.75 },
+  "glass-break":  { id: "glass-generic",   displayName: "Glass-Break Sensor",    vendor: "Generic", unitPrice: 60,   laborHours: 0.5  },
+  "door-contact": { id: "contact-generic", displayName: "Door Contact",          vendor: "Generic", unitPrice: 25,   laborHours: 0.25 },
+  smoke:          { id: "smoke-generic",   displayName: "Smoke Detector",        vendor: "Generic", unitPrice: 35,   laborHours: 0.75 },
+  heat:           { id: "heat-generic",    displayName: "Heat Detector",         vendor: "Generic", unitPrice: 30,   laborHours: 0.75 },
+  notification:   { id: "notif-generic",   displayName: "Notification Appliance", vendor: "Generic", unitPrice: 85,   laborHours: 0.75 },
+  "access-point": { id: "ap-generic",      displayName: "Wi-Fi Access Point",    vendor: "Generic", unitPrice: 350,  laborHours: 1.0  },
+  switch:         { id: "switch-generic",  displayName: "PoE Switch",            vendor: "Generic", unitPrice: 700,  laborHours: 2.0  },
+  nvr:            { id: "nvr-generic",     displayName: "NVR",                   vendor: "Generic", unitPrice: 850,  laborHours: 3.0  },
 };
 
-export const READER_MODELS: Record<
-  "card" | "biometric" | "keypad",
-  ModelEntry
-> = {
-  card: {
-    id: "reader-card",
-    displayName: "Multi-format Card Reader",
-    vendor: "HID-class",
-    unitPrice: 180,
-    laborHours: 1.25,
-  },
-  biometric: {
-    id: "reader-bio",
-    displayName: "Biometric Reader (fingerprint + card)",
-    vendor: "Suprema-class",
-    unitPrice: 540,
-    laborHours: 1.75,
-  },
-  keypad: {
-    id: "reader-keypad",
-    displayName: "Keypad Reader",
-    vendor: "HID-class",
-    unitPrice: 120,
-    laborHours: 1.25,
-  },
-};
-
-export const SENSOR_MODELS: Record<
-  "motion" | "glass-break" | "door-contact" | "smoke",
-  ModelEntry
-> = {
-  motion: {
-    id: "sensor-pir",
-    displayName: "PIR Motion Sensor",
-    vendor: "Bosch-class",
-    unitPrice: 55,
-    laborHours: 0.75,
-  },
-  "glass-break": {
-    id: "sensor-glass",
-    displayName: "Acoustic Glass-Break",
-    vendor: "DSC-class",
-    unitPrice: 75,
-    laborHours: 0.5,
-  },
-  "door-contact": {
-    id: "sensor-contact",
-    displayName: "Door Contact (magnetic)",
-    vendor: "Honeywell-class",
-    unitPrice: 18,
-    laborHours: 0.25,
-  },
-  smoke: {
-    id: "sensor-smoke",
-    displayName: "Commercial Smoke Detector",
-    vendor: "System Sensor",
-    unitPrice: 95,
-    laborHours: 0.75,
-  },
-};
-
-export const NETWORK_MODELS: Record<
-  "switch" | "access-point" | "nvr",
-  ModelEntry
-> = {
-  "access-point": {
-    id: "ap-wifi6",
-    displayName: "Wi-Fi 6 Access Point (PoE)",
-    vendor: "Ubiquiti-class",
-    unitPrice: 260,
-    laborHours: 1.0,
-  },
-  switch: {
-    id: "switch-24p",
-    displayName: "24-port Managed PoE+ Switch",
-    vendor: "Cisco-class",
-    unitPrice: 920,
-    laborHours: 2.0,
-  },
-  nvr: {
-    id: "nvr-32ch",
-    displayName: "32-channel NVR (8TB)",
-    vendor: "Hikvision-class",
-    unitPrice: 1450,
-    laborHours: 3.0,
-  },
-};
-
-/** Look up the model entry that applies to a given device. */
-export function modelFor(device: Device): ModelEntry {
+function subtypeOf(device: Device): string {
   switch (device.type) {
-    case "camera":
-      return CAMERA_MODELS[device.cameraType];
-    case "reader":
-      return READER_MODELS[device.readerType];
-    case "sensor":
-      return SENSOR_MODELS[device.sensorType];
-    case "network":
-      return NETWORK_MODELS[device.networkType];
+    case "camera":  return device.cameraType;
+    case "reader":  return device.readerType;
+    case "sensor":  return device.sensorType;
+    case "network": return device.networkType;
   }
+}
+
+export function modelFor(device: Device): ModelEntry {
+  if (device.catalogId) {
+    const product = getProduct(device.catalogId);
+    if (product) {
+      return {
+        id: product.id,
+        displayName: product.fullName,
+        vendor: product.manufacturer,
+        unitPrice: product.streetPrice,
+        laborHours: product.laborHours,
+      };
+    }
+  }
+  return FALLBACK_MODELS[subtypeOf(device)] ?? FALLBACK_MODELS.dome;
 }
 
 export interface QuoteSettings {

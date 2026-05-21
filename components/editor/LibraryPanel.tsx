@@ -1,28 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronRight, Search } from "lucide-react";
 import type { DeviceType } from "@/types/design";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { DevicePreview3D, type PreviewKind } from "./DevicePreview3D";
+import {
+  type CatalogProduct,
+  getProductsByCategory,
+  searchProducts,
+} from "@/lib/catalog";
 
-type CameraSubtype = "dome" | "ptz" | "fixed" | "fisheye";
-type ReaderSubtype = "card" | "biometric" | "keypad";
-type SensorSubtype = "motion" | "glass-break" | "door-contact" | "smoke";
-type NetworkSubtype = "switch" | "access-point" | "nvr";
-
-interface DeviceCard {
-  type: DeviceType;
-  subtype: CameraSubtype | ReaderSubtype | SensorSubtype | NetworkSubtype;
-  label: string;
-  description: string;
-}
-
-// Per-device-type accent metadata that drives the hover shadow + category
-// pill. Keeping this colocated with the catalog means each device kind has
-// one source of truth for its color identity.
 const TYPE_TONE: Record<
   DeviceType,
   { dot: string; pill: string; shadow: string }
@@ -49,140 +39,107 @@ const TYPE_TONE: Record<
   },
 };
 
-function previewKindFor(card: DeviceCard): PreviewKind {
-  switch (card.type) {
-    case "camera":
-      return { type: "camera", subtype: card.subtype as CameraSubtype };
-    case "reader":
-      return { type: "reader", subtype: card.subtype as ReaderSubtype };
-    case "sensor":
-      return { type: "sensor", subtype: card.subtype as SensorSubtype };
-    case "network":
-      return { type: "network", subtype: card.subtype as NetworkSubtype };
-  }
-}
+const SUBCATEGORY_TO_PREVIEW: Record<string, PreviewKind> = {
+  dome: { type: "camera", subtype: "dome" },
+  bullet: { type: "camera", subtype: "fixed" },
+  fixed: { type: "camera", subtype: "fixed" },
+  ptz: { type: "camera", subtype: "ptz" },
+  fisheye: { type: "camera", subtype: "dome" },
+  "multi-sensor": { type: "camera", subtype: "dome" },
+  mini: { type: "camera", subtype: "dome" },
+  modular: { type: "camera", subtype: "fixed" },
+  card: { type: "reader", subtype: "card" },
+  biometric: { type: "reader", subtype: "biometric" },
+  keypad: { type: "reader", subtype: "keypad" },
+  controller: { type: "reader", subtype: "card" },
+  lock: { type: "reader", subtype: "card" },
+  motion: { type: "sensor", subtype: "motion" },
+  "glass-break": { type: "sensor", subtype: "glass-break" },
+  "door-contact": { type: "sensor", subtype: "door-contact" },
+  smoke: { type: "sensor", subtype: "motion" },
+  heat: { type: "sensor", subtype: "motion" },
+  notification: { type: "sensor", subtype: "motion" },
+  "access-point": { type: "network", subtype: "access-point" },
+  switch: { type: "network", subtype: "switch" },
+  nvr: { type: "network", subtype: "nvr" },
+};
 
-const catalog: { category: string; items: DeviceCard[] }[] = [
-  {
-    category: "Cameras",
-    items: [
-      {
-        type: "camera",
-        subtype: "dome",
-        label: "Dome camera",
-        description: "Indoor ceiling-mount · 90° FOV",
-      },
-      {
-        type: "camera",
-        subtype: "ptz",
-        label: "PTZ camera",
-        description: "Pan / tilt / zoom · 60° FOV",
-      },
-      {
-        type: "camera",
-        subtype: "fixed",
-        label: "Fixed camera",
-        description: "Wall-mount bullet · 80° FOV",
-      },
-    ],
-  },
-  {
-    category: "Access control",
-    items: [
-      {
-        type: "reader",
-        subtype: "card",
-        label: "Card reader",
-        description: "Door-side mount · 1.2m",
-      },
-      {
-        type: "reader",
-        subtype: "biometric",
-        label: "Biometric reader",
-        description: "Fingerprint + card",
-      },
-    ],
-  },
-  {
-    category: "Sensors",
-    items: [
-      {
-        type: "sensor",
-        subtype: "motion",
-        label: "Motion sensor",
-        description: "PIR · 8m detection",
-      },
-      {
-        type: "sensor",
-        subtype: "glass-break",
-        label: "Glass-break",
-        description: "Acoustic · 6m range",
-      },
-      {
-        type: "sensor",
-        subtype: "door-contact",
-        label: "Door contact",
-        description: "Magnetic switch",
-      },
-    ],
-  },
-  {
-    category: "Network",
-    items: [
-      {
-        type: "network",
-        subtype: "access-point",
-        label: "Wi-Fi access point",
-        description: "Wi-Fi 6 · 15m coverage",
-      },
-      {
-        type: "network",
-        subtype: "switch",
-        label: "Network switch",
-        description: "PoE · 24 ports",
-      },
-      {
-        type: "network",
-        subtype: "nvr",
-        label: "NVR",
-        description: "32-channel · 8TB",
-      },
-    ],
-  },
+type CategoryKey = "camera" | "reader" | "sensor" | "network";
+
+const CATEGORIES: { key: CategoryKey; label: string }[] = [
+  { key: "camera", label: "Cameras" },
+  { key: "reader", label: "Access Control" },
+  { key: "sensor", label: "Sensors" },
+  { key: "network", label: "Network" },
 ];
 
-const CATEGORY_TYPE: Record<string, DeviceType> = {
-  Cameras: "camera",
-  "Access control": "reader",
-  Sensors: "sensor",
-  Network: "network",
-};
+function groupByManufacturer(products: CatalogProduct[]) {
+  const map = new Map<string, CatalogProduct[]>();
+  for (const p of products) {
+    const list = map.get(p.manufacturer) ?? [];
+    list.push(p);
+    map.set(p.manufacturer, list);
+  }
+  return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+}
+
+function formatPrice(n: number) {
+  return n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n}`;
+}
 
 export function LibraryPanel() {
   const [query, setQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState<CategoryKey>("camera");
+  const [expandedMfg, setExpandedMfg] = useState<Set<string>>(new Set());
   const floor = useActiveFloor();
   const addDevice = useDesignStore((s) => s.addDevice);
 
-  const lower = query.trim().toLowerCase();
-  const filtered = catalog
-    .map((group) => ({
-      ...group,
-      items: group.items.filter(
-        (i) =>
-          !lower ||
-          i.label.toLowerCase().includes(lower) ||
-          i.description.toLowerCase().includes(lower) ||
-          group.category.toLowerCase().includes(lower)
-      ),
-    }))
-    .filter((g) => g.items.length > 0);
+  const isSearching = query.trim().length > 0;
 
-  function quickAdd(card: DeviceCard) {
-    if (!floor) return;
-    addDevice(floor.id, card.type, {
-      x: 200 + Math.random() * 100,
-      y: 200 + Math.random() * 100,
+  const searchResults = useMemo(
+    () => (isSearching ? searchProducts(query) : []),
+    [query, isSearching],
+  );
+
+  const categoryProducts = useMemo(
+    () => (isSearching ? [] : getProductsByCategory(activeCategory)),
+    [activeCategory, isSearching],
+  );
+
+  const grouped = useMemo(
+    () => groupByManufacturer(isSearching ? searchResults : categoryProducts),
+    [isSearching, searchResults, categoryProducts],
+  );
+
+  function toggleMfg(name: string) {
+    setExpandedMfg((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
     });
+  }
+
+  function handleAdd(product: CatalogProduct) {
+    if (!floor) return;
+    addDevice(
+      floor.id,
+      product.category,
+      { x: 200 + Math.random() * 100, y: 200 + Math.random() * 100 },
+      product,
+    );
+  }
+
+  function handleDragStart(e: React.DragEvent, product: CatalogProduct) {
+    e.dataTransfer.setData(
+      "application/x-dv-device",
+      JSON.stringify({
+        type: product.category,
+        subtype: product.subcategory,
+        catalogId: product.id,
+      }),
+    );
+    e.dataTransfer.effectAllowed = "copy";
   }
 
   return (
@@ -190,7 +147,7 @@ export function LibraryPanel() {
       <div className="border-b border-border/70 px-3 py-3.5">
         <div className="mb-2.5 flex items-baseline justify-between">
           <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Device library
+            Product library
           </div>
           <div className="text-[0.62rem] font-mono uppercase tracking-[0.12em] text-muted-foreground/70">
             drag → canvas
@@ -201,88 +158,130 @@ export function LibraryPanel() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search devices…"
+            placeholder="Search products… e.g. Verkada dome"
             className="h-9 w-full rounded-lg border border-border bg-background/50 pl-8 pr-3 text-[0.82rem] outline-none transition-colors placeholder:text-muted-foreground/70 hover:border-border/90 focus:border-primary/40 focus:bg-background focus:ring-2 focus:ring-primary/15"
           />
         </div>
       </div>
+
+      {!isSearching && (
+        <div className="flex border-b border-border/70">
+          {CATEGORIES.map((cat) => {
+            const tone = TYPE_TONE[cat.key];
+            const isActive = activeCategory === cat.key;
+            return (
+              <button
+                key={cat.key}
+                type="button"
+                onClick={() => setActiveCategory(cat.key)}
+                className={cn(
+                  "flex-1 px-1 py-2 text-[0.62rem] font-semibold uppercase tracking-[0.1em] transition-colors",
+                  isActive
+                    ? "text-foreground border-b-2 border-primary"
+                    : "text-muted-foreground/70 hover:text-muted-foreground",
+                )}
+              >
+                <span className={cn("mr-1 inline-block size-1.5 rounded-full", isActive ? tone.dot : "bg-muted-foreground/30")} />
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <ScrollArea className="flex-1">
-        <div className="p-3 space-y-6">
-          {filtered.length === 0 && (
+        <div className="p-3 space-y-1">
+          {grouped.length === 0 && (
             <div className="text-center text-sm text-muted-foreground py-12 px-3">
-              <div className="mb-1">Nothing matches</div>
-              <div className="font-serif-italic text-foreground/70">
-                &ldquo;{query}&rdquo;
-              </div>
+              {isSearching ? (
+                <>
+                  <div className="mb-1">No products match</div>
+                  <div className="font-serif-italic text-foreground/70">
+                    &ldquo;{query}&rdquo;
+                  </div>
+                </>
+              ) : (
+                <div>No products in this category</div>
+              )}
             </div>
           )}
-          {filtered.map((group) => {
-            const deviceType = CATEGORY_TYPE[group.category];
-            const tone = TYPE_TONE[deviceType];
+
+          {grouped.map(([manufacturer, products]) => {
+            const isOpen = isSearching || expandedMfg.has(manufacturer) || grouped.length === 1;
             return (
-              <div key={group.category}>
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="inline-flex items-center gap-1.5">
-                    <span className={cn("size-1.5 rounded-full", tone.dot)} />
-                    <span className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                      {group.category}
-                    </span>
-                  </div>
-                  <span
+              <div key={manufacturer}>
+                <button
+                  type="button"
+                  onClick={() => toggleMfg(manufacturer)}
+                  className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 hover:bg-muted/50 transition-colors"
+                >
+                  <ChevronRight
                     className={cn(
-                      "rounded-full border px-1.5 py-0.5 text-[0.6rem] font-mono",
-                      tone.pill
+                      "size-3.5 text-muted-foreground transition-transform",
+                      isOpen && "rotate-90",
                     )}
-                  >
-                    {group.items.length}
+                  />
+                  <span className="text-[0.78rem] font-semibold tracking-[-0.005em]">
+                    {manufacturer}
                   </span>
-                </div>
-                <div className="space-y-1.5">
-                  {group.items.map((card) => (
-                    <button
-                      key={card.label}
-                      type="button"
-                      onClick={() => quickAdd(card)}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData(
-                          "application/x-dv-device",
-                          JSON.stringify({
-                            type: card.type,
-                            subtype: card.subtype,
-                          })
-                        );
-                        e.dataTransfer.effectAllowed = "copy";
-                      }}
-                      className={cn(
-                        "group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border border-border/70",
-                        "bg-card/40 px-2.5 py-2 text-left",
-                        "transition-[transform,background-color,border-color,box-shadow] duration-200",
-                        "hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card",
-                        tone.shadow,
-                        "active:translate-y-0 active:scale-[0.99] cursor-grab active:cursor-grabbing"
-                      )}
-                    >
-                      <div className="relative size-14 shrink-0 overflow-hidden rounded-lg shadow-[inset_0_0_0_1px_rgb(0_0_0_/_8%),0_1px_3px_-1px_rgb(0_0_0_/_15%)]">
-                        <DevicePreview3D kind={previewKindFor(card)} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[0.85rem] font-medium tracking-[-0.005em]">
-                          {card.label}
-                        </div>
-                        <div className="truncate text-[0.7rem] text-muted-foreground/85">
-                          {card.description}
-                        </div>
-                      </div>
-                      {/* Subtle drag affordance — three vertical dots that show on hover */}
-                      <div className="flex shrink-0 flex-col gap-0.5 opacity-0 transition-opacity group-hover:opacity-50">
-                        <span className="size-1 rounded-full bg-current" />
-                        <span className="size-1 rounded-full bg-current" />
-                        <span className="size-1 rounded-full bg-current" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                  <span className="ml-auto text-[0.62rem] font-mono text-muted-foreground/70">
+                    {products.length}
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="ml-2 space-y-1 pb-2">
+                    {products.map((product) => {
+                      const tone = TYPE_TONE[product.category];
+                      const preview = SUBCATEGORY_TO_PREVIEW[product.subcategory] ?? { type: "camera", subtype: "dome" };
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => handleAdd(product)}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, product)}
+                          className={cn(
+                            "group relative flex w-full items-center gap-2.5 overflow-hidden rounded-xl border border-border/70",
+                            "bg-card/40 px-2.5 py-2 text-left",
+                            "transition-[transform,background-color,border-color,box-shadow] duration-200",
+                            "hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card",
+                            tone.shadow,
+                            "active:translate-y-0 active:scale-[0.99] cursor-grab active:cursor-grabbing",
+                          )}
+                        >
+                          <div className="relative size-12 shrink-0 overflow-hidden rounded-lg shadow-[inset_0_0_0_1px_rgb(0_0_0_/_8%),0_1px_3px_-1px_rgb(0_0_0_/_15%)]">
+                            <DevicePreview3D kind={preview} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate text-[0.8rem] font-medium tracking-[-0.005em]">
+                                {product.model}
+                              </span>
+                              <span className={cn(
+                                "shrink-0 rounded-full border px-1.5 py-0 text-[0.55rem] font-mono leading-relaxed",
+                                tone.pill,
+                              )}>
+                                {product.subcategory}
+                              </span>
+                            </div>
+                            <div className="truncate text-[0.68rem] text-muted-foreground/85">
+                              {product.description}
+                            </div>
+                            <div className="mt-0.5 text-[0.62rem] font-mono text-muted-foreground/60">
+                              {formatPrice(product.streetPrice)}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 flex-col gap-0.5 opacity-0 transition-opacity group-hover:opacity-50">
+                            <span className="size-1 rounded-full bg-current" />
+                            <span className="size-1 rounded-full bg-current" />
+                            <span className="size-1 rounded-full bg-current" />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}

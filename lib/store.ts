@@ -21,6 +21,7 @@ import {
 } from "@/types/design";
 import { buildDemoFloor } from "./demo-design";
 import { DEFAULT_QUOTE_SETTINGS, type QuoteSettings } from "./pricing";
+import { type CatalogProduct } from "./catalog";
 
 function uid(prefix = "id"): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -90,7 +91,7 @@ interface DesignState {
   setActiveFloor(floorId: string): void;
   updateFloor(floorId: string, partial: Partial<Omit<Floor, "id">>): void;
 
-  addDevice(floorId: string, type: DeviceType, position: Vec2): Device;
+  addDevice(floorId: string, type: DeviceType, position: Vec2, catalogProduct?: CatalogProduct): Device;
   updateDevice(floorId: string, deviceId: string, partial: Partial<Device>): void;
   removeDevice(floorId: string, deviceId: string): void;
 
@@ -253,9 +254,47 @@ export const useDesignStore = create<DesignState>()(
           });
         },
 
-        addDevice(floorId, type, position) {
+        addDevice(floorId, type, position, catalogProduct) {
+          const base = defaultsFor(type);
+          const override: Record<string, unknown> = {};
+          if (catalogProduct) {
+            override.catalogId = catalogProduct.id;
+            override.label = catalogProduct.fullName;
+            if (catalogProduct.specs.fovDegrees != null) override.fovDegrees = catalogProduct.specs.fovDegrees;
+            if (catalogProduct.specs.rangeMeters != null) override.rangeMeters = catalogProduct.specs.rangeMeters;
+            if (catalogProduct.specs.irRange != null) override.irRange = catalogProduct.specs.irRange;
+            if (catalogProduct.specs.resolution) override.resolution = catalogProduct.specs.resolution;
+            if (catalogProduct.specs.coverageMeters != null) override.coverageMeters = catalogProduct.specs.coverageMeters;
+            if (catalogProduct.specs.portCount != null) override.portCount = catalogProduct.specs.portCount;
+            if (type === "camera") {
+              override.cameraType = catalogProduct.subcategory;
+              // Auto-generate lenses for multi-sensor cameras
+              if (catalogProduct.subcategory === "multi-sensor" && catalogProduct.specs.lensCount) {
+                const count = catalogProduct.specs.lensCount;
+                const fov = catalogProduct.specs.fovDegrees ?? 90;
+                const range = catalogProduct.specs.rangeMeters ?? 15;
+                const lenses = [];
+                for (let i = 0; i < count; i++) {
+                  lenses.push({
+                    id: uid("lens"),
+                    label: `Lens ${i + 1}`,
+                    fovDegrees: fov,
+                    rangeMeters: range,
+                    rotationOffset: (i * 2 * Math.PI) / count,
+                    irRange: catalogProduct.specs.irRange,
+                    resolution: catalogProduct.specs.resolution,
+                  });
+                }
+                override.lenses = lenses;
+              }
+            }
+            if (type === "reader") override.readerType = catalogProduct.subcategory;
+            if (type === "sensor") override.sensorType = catalogProduct.subcategory;
+            if (type === "network") override.networkType = catalogProduct.subcategory;
+          }
           const newDevice: Device = {
-            ...defaultsFor(type),
+            ...base,
+            ...override,
             id: uid("dev"),
             position,
           } as Device;
