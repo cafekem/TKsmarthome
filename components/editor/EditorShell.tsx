@@ -9,6 +9,7 @@ import { StatusBar } from "./StatusBar";
 import { Canvas2D } from "@/components/canvas2d/Canvas2D";
 import { Scene3D } from "@/components/scene3d/Scene3D";
 import { SimView } from "@/components/simulation/SimView";
+import { AISurveyDialog } from "@/components/ai/AISurveyDialog";
 
 function useHasHydrated() {
   const [hydrated, setHydrated] = useState(false);
@@ -22,6 +23,8 @@ export function EditorShell({ designId }: { designId: string }) {
   const ensureDesign = useDesignStore((s) => s.ensureDesign);
   const setCurrent = useDesignStore((s) => s.setCurrentDesign);
   const mode = useDesignStore((s) => s.viewMode);
+  const aiSurveyOpen = useDesignStore((s) => s.aiSurveyOpen);
+  const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
   const hydrated = useHasHydrated();
 
   useEffect(() => {
@@ -51,6 +54,10 @@ export function EditorShell({ designId }: { designId: string }) {
         </div>
       </div>
       <StatusBar />
+      <AISurveyDialog
+        open={aiSurveyOpen}
+        onClose={() => setAISurveyOpen(false)}
+      />
     </div>
   );
 }

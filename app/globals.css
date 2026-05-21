@@ -61,8 +61,8 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.015 240);
 
-  /* A slightly darker sage so it carries enough contrast on white */
-  --primary: oklch(0.6 0.13 158);
+  /* Refined professional blue — Linear/Vercel territory */
+  --primary: oklch(0.55 0.17 245);
   --primary-foreground: oklch(0.99 0 0);
 
   --secondary: oklch(0.955 0.008 240);
@@ -78,10 +78,10 @@
 
   --border: oklch(0 0 0 / 9%);
   --input: oklch(0 0 0 / 12%);
-  --ring: oklch(0.6 0.13 158 / 50%);
+  --ring: oklch(0.55 0.17 245 / 50%);
 
-  --chart-1: oklch(0.6 0.13 158);
-  --chart-2: oklch(0.55 0.15 230);
+  --chart-1: oklch(0.55 0.17 245);
+  --chart-2: oklch(0.65 0.14 200);
   --chart-3: oklch(0.7 0.13 80);
   --chart-4: oklch(0.6 0.21 25);
   --chart-5: oklch(0.55 0.18 300);
@@ -90,12 +90,12 @@
 
   --sidebar: oklch(0.97 0.006 240);
   --sidebar-foreground: oklch(0.18 0.015 240);
-  --sidebar-primary: oklch(0.6 0.13 158);
+  --sidebar-primary: oklch(0.55 0.17 245);
   --sidebar-primary-foreground: oklch(0.99 0 0);
   --sidebar-accent: oklch(0.93 0.01 240);
   --sidebar-accent-foreground: oklch(0.18 0.015 240);
   --sidebar-border: oklch(0 0 0 / 9%);
-  --sidebar-ring: oklch(0.6 0.13 158 / 50%);
+  --sidebar-ring: oklch(0.55 0.17 245 / 50%);
 
   /* Canvas surface — soft "drawing paper" tint in light mode */
   --canvas: oklch(0.965 0.008 240);
@@ -114,7 +114,7 @@
   --popover: oklch(0.215 0.01 240);
   --popover-foreground: oklch(0.97 0.005 240);
 
-  --primary: oklch(0.78 0.135 158);
+  --primary: oklch(0.72 0.14 245);
   --primary-foreground: oklch(0.145 0.01 240);
 
   --secondary: oklch(0.235 0.012 240);
@@ -130,25 +130,25 @@
 
   --border: oklch(1 0 0 / 7%);
   --input: oklch(1 0 0 / 10%);
-  --ring: oklch(0.78 0.135 158 / 55%);
+  --ring: oklch(0.72 0.14 245 / 55%);
 
-  --chart-1: oklch(0.78 0.135 158);
-  --chart-2: oklch(0.7 0.13 230);
+  --chart-1: oklch(0.72 0.14 245);
+  --chart-2: oklch(0.75 0.13 200);
   --chart-3: oklch(0.78 0.13 80);
   --chart-4: oklch(0.66 0.205 25);
   --chart-5: oklch(0.65 0.16 300);
 
   --sidebar: oklch(0.185 0.009 240);
   --sidebar-foreground: oklch(0.97 0.005 240);
-  --sidebar-primary: oklch(0.78 0.135 158);
+  --sidebar-primary: oklch(0.72 0.14 245);
   --sidebar-primary-foreground: oklch(0.145 0.01 240);
   --sidebar-accent: oklch(0.27 0.014 240);
   --sidebar-accent-foreground: oklch(0.97 0.005 240);
   --sidebar-border: oklch(1 0 0 / 7%);
-  --sidebar-ring: oklch(0.78 0.135 158 / 55%);
+  --sidebar-ring: oklch(0.72 0.14 245 / 55%);
 
   --canvas: oklch(0.115 0 0);
-  --canvas-accent: oklch(0.78 0.135 158 / 18%);
+  --canvas-accent: oklch(0.72 0.14 245 / 18%);
   --grid-line: oklch(1 0 0 / 3.5%);
   --noise-tint: 1;
 }

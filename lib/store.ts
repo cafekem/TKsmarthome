@@ -73,6 +73,7 @@ interface DesignState {
   showCoverage: boolean;
   viewTransform: ViewTransform;
   quoteSettings: QuoteSettings;
+  aiSurveyOpen: boolean;
 
   ensureDesign(id: string): DesignDocument;
   setCurrentDesign(id: string): void;
@@ -86,6 +87,7 @@ interface DesignState {
   setTool(tool: Tool): void;
   toggleCoverage(): void;
   setViewTransform(t: ViewTransform): void;
+  setAISurveyOpen(open: boolean): void;
 
   addFloor(): void;
   setActiveFloor(floorId: string): void;
@@ -127,6 +129,7 @@ export const useDesignStore = create<DesignState>()(
         showCoverage: true,
         viewTransform: { scale: 1, offset: { x: 0, y: 0 } },
         quoteSettings: DEFAULT_QUOTE_SETTINGS,
+        aiSurveyOpen: false,
 
         ensureDesign(id) {
           const existing = get().designs[id];
@@ -191,6 +194,10 @@ export const useDesignStore = create<DesignState>()(
 
         setViewTransform(t) {
           set({ viewTransform: t });
+        },
+
+        setAISurveyOpen(open) {
+          set({ aiSurveyOpen: open });
         },
 
         addFloor() {

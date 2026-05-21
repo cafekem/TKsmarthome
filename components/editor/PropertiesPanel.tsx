@@ -33,20 +33,42 @@ export function PropertiesPanel() {
 
   return (
     <aside className="flex h-full w-full flex-col border-l border-border/70 bg-sidebar">
-      <div className="border-b border-border/70 px-4 py-3">
-        <div className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          {selected ? "Device properties" : floor ? "Floor settings" : "Properties"}
+      <div className="flex items-center justify-between border-b border-border/70 px-4 py-3.5">
+        <div className="flex flex-col">
+          <div className="text-[0.92rem] font-semibold tracking-[-0.01em] text-foreground">
+            {selected
+              ? selected.type === "camera"
+                ? "Camera"
+                : selected.type === "reader"
+                  ? "Reader"
+                  : selected.type === "sensor"
+                    ? "Sensor"
+                    : "Network device"
+              : floor
+                ? "Floor settings"
+                : "Properties"}
+          </div>
+          {selected && (
+            <div className="mt-0.5 text-[0.74rem] text-muted-foreground">
+              {selected.label || "Untitled"}
+            </div>
+          )}
         </div>
         {selected && (
-          <div className="mt-1 text-[0.78rem] font-serif-italic text-foreground/70">
-            Editing {selected.type === "camera"
-              ? "a camera"
-              : selected.type === "reader"
-                ? "a reader"
-                : selected.type === "sensor"
-                  ? "a sensor"
-                  : "a network device"}
-          </div>
+          <div
+            className="size-2 rounded-full"
+            style={{
+              backgroundColor:
+                selected.type === "camera"
+                  ? "#3b82f6"
+                  : selected.type === "reader"
+                    ? "#0ea5e9"
+                    : selected.type === "sensor"
+                      ? "#f59e0b"
+                      : "#a78bfa",
+            }}
+            aria-hidden="true"
+          />
         )}
       </div>
       <ScrollArea className="flex-1">
@@ -141,9 +163,23 @@ function FloorForm({
 
       <Separator />
 
-      <div className="rounded-lg border border-border bg-card/40 p-3 text-xs text-muted-foreground leading-relaxed">
-        Tip: Drag a device from the left sidebar onto the canvas to place it.
-        Click any placed device to edit its properties here.
+      <div className="flex gap-2.5 rounded-lg bg-primary/[0.06] border border-primary/15 p-3 text-[0.78rem] text-foreground/75 leading-relaxed">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="size-3.5 mt-0.5 shrink-0 text-primary"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v4M12 16h.01" />
+        </svg>
+        <span>
+          Drag a device from the left to place it. Click any placed device to
+          edit its properties.
+        </span>
       </div>
     </div>
   );
@@ -456,4 +492,4 @@ function CameraExtras({
   );
 }
 
-const LENS_COLORS = ["#34d399", "#38bdf8", "#f97316", "#e879f9", "#facc15", "#2dd4bf"];
+const LENS_COLORS = ["#3b82f6", "#06b6d4", "#f97316", "#e879f9", "#facc15", "#10b981"];

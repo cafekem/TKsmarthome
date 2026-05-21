@@ -2,16 +2,13 @@
 
 import { useMemo } from "react";
 import {
-  Activity,
   AlertTriangle,
   CheckCircle2,
   Pause,
   Play,
   RotateCcw,
   ShieldAlert,
-  Timer,
   X,
-  Zap,
 } from "lucide-react";
 import { Scene3D } from "@/components/scene3d/Scene3D";
 import { useActiveFloor } from "@/lib/store";
@@ -63,114 +60,93 @@ function SimControls() {
   const coveragePct =
     totalElapsed > 0.001 ? Math.round((coveredTime / totalElapsed) * 100) : 0;
 
+  // Status indicator color — single dot that summarizes coverage at a glance
+  const statusColor =
+    detectionCount > 0
+      ? "bg-primary"
+      : coveragePct >= 50
+        ? "bg-amber-500"
+        : "bg-rose-500";
+
   return (
-    <div className="absolute bottom-4 left-1/2 z-30 -translate-x-1/2">
-      <div className="flex min-w-[520px] flex-col gap-2.5 rounded-2xl border border-border bg-card/92 px-4 py-3 shadow-2xl backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => (running ? pause() : play())}
-            className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-lg btn-lift",
-              "bg-primary text-primary-foreground shadow-[inset_0_1px_0_oklch(1_0_0/14%),0_4px_16px_-6px_oklch(0.78_0.135_158/55%)] hover:bg-primary/90"
-            )}
-            aria-label={running ? "Pause" : "Play"}
-          >
-            {running ? (
-              <Pause className="size-4 fill-current" />
-            ) : (
-              <Play className="size-4 fill-current" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={reset}
-            className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card/40 text-muted-foreground btn-lift hover:text-foreground hover:bg-card/70"
-            aria-label="Restart"
-          >
-            <RotateCcw className="size-4" />
-          </button>
-          <div className="flex flex-1 flex-col gap-1">
-            <div className="flex items-center justify-between text-[0.72rem] font-mono text-muted-foreground">
-              <span>
-                <span className="uppercase tracking-[0.08em] opacity-70">t </span>
-                <span className="text-foreground/90">{t.toFixed(1)}s</span>
-              </span>
-              <span>
-                <span className="uppercase tracking-[0.08em] opacity-70">
-                  total{" "}
-                </span>
-                <span className="text-foreground/90">{doneAt.toFixed(1)}s</span>
-              </span>
-            </div>
-            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-background/60">
-              <div
-                className="absolute inset-y-0 left-0 bg-primary transition-[width] duration-100"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
+    <div className="absolute bottom-6 left-1/2 z-30 -translate-x-1/2">
+      <div className="flex items-center gap-2.5 rounded-full bg-background/75 px-2 py-1.5 shadow-[0_12px_40px_-14px_rgba(0,0,0,0.35)] backdrop-blur-2xl ring-1 ring-black/[0.06] dark:ring-white/[0.06]">
+        {/* Play / Pause */}
+        <button
+          type="button"
+          onClick={() => (running ? pause() : play())}
+          className={cn(
+            "flex size-8 shrink-0 items-center justify-center rounded-full transition-all",
+            "bg-foreground text-background hover:scale-[1.04] active:scale-[0.97]"
+          )}
+          aria-label={running ? "Pause" : "Play"}
+        >
+          {running ? (
+            <Pause className="size-3 fill-current" />
+          ) : (
+            <Play className="size-3 fill-current translate-x-px" />
+          )}
+        </button>
+
+        {/* Reset */}
+        <button
+          type="button"
+          onClick={reset}
+          className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+          aria-label="Restart"
+        >
+          <RotateCcw className="size-3" strokeWidth={2} />
+        </button>
+
+        {/* Timeline */}
+        <div className="flex w-[280px] items-center gap-2.5 px-1">
+          <span className="text-[0.72rem] tabular-nums font-medium text-foreground/85 w-9 text-right">
+            {t.toFixed(1)}s
+          </span>
+          <div className="relative h-1 flex-1 overflow-visible">
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-foreground/[0.08]" />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-foreground/85 transition-[width] duration-100"
+              style={{ width: `${progress * 100}%` }}
+            />
+            <div
+              className="absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground"
+              style={{ left: `${progress * 100}%` }}
+            />
           </div>
-          <div className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-background/40 p-0.5">
-            {[0.5, 1, 2, 4].map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSpeed(s)}
-                className={cn(
-                  "rounded px-1.5 py-0.5 text-[0.7rem] font-mono transition-colors",
-                  speed === s
-                    ? "bg-primary/20 text-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {s}x
-              </button>
-            ))}
-          </div>
+          <span className="text-[0.72rem] tabular-nums text-muted-foreground/65 w-10">
+            {doneAt.toFixed(1)}s
+          </span>
         </div>
-        <div className="flex items-center justify-between gap-3 text-[0.78rem]">
-          <div className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <Activity className="size-3.5 text-primary" />
-            <span>
-              Subject walks the demo path. Camera cones light up green on
-              detection.
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div
+
+        {/* Speed — compact segmented control */}
+        <div className="flex shrink-0 items-center gap-px rounded-full bg-foreground/[0.05] p-0.5">
+          {[1, 2, 4].map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSpeed(s)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.7rem] font-mono",
-                coveragePct >= 80
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : coveragePct >= 50
-                    ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
-                    : "border-rose-500/40 bg-rose-500/10 text-rose-400"
+                "rounded-full px-1.5 py-0.5 text-[0.7rem] tabular-nums transition-colors",
+                speed === s
+                  ? "bg-card text-foreground shadow-[0_1px_2px_-1px_rgba(0,0,0,0.18)]"
+                  : "text-muted-foreground/85 hover:text-foreground"
               )}
             >
-              <Timer className="size-3" />
-              {coveragePct}% covered
-            </div>
-            <div
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.7rem] font-mono",
-                detectionCount > 0
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-rose-500/40 bg-rose-500/10 text-rose-400"
-              )}
-            >
-              {detectionCount > 0 ? (
-                <>
-                  <Zap className="size-3" />
-                  {detectionCount} on subject
-                </>
-              ) : (
-                <>
-                  <ShieldAlert className="size-3" />
-                  Blind
-                </>
-              )}
-            </div>
-          </div>
+              {s}×
+            </button>
+          ))}
+        </div>
+
+        {/* Status indicator — a single dot + concise label so the banner stays small */}
+        <div className="flex shrink-0 items-center gap-1.5 pl-1.5 pr-2">
+          <span className={cn("size-1.5 rounded-full", statusColor)} aria-hidden="true" />
+          <span className="text-[0.72rem] font-medium tabular-nums text-foreground/85">
+            {detectionCount > 0 ? `${detectionCount} on subject` : "blind"}
+          </span>
+          <span className="text-[0.7rem] tabular-nums text-muted-foreground/70">
+            · {coveragePct}%
+          </span>
         </div>
       </div>
     </div>
@@ -282,7 +258,7 @@ function AfterActionReport() {
               After-action report
             </div>
             <div className="mt-1 text-xl font-medium tracking-[-0.01em]">
-              <span className="font-serif-italic text-primary">{floor.name}</span>
+              <span className="font-medium text-foreground">{floor.name}</span>
               {" "}— subject walk-through
             </div>
           </div>
@@ -482,7 +458,7 @@ function NoPathState() {
         </h3>
         <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
           Load the{" "}
-          <span className="font-serif-italic text-foreground/80">demo office</span>{" "}
+          <span className="font-medium text-foreground/80">demo office</span>{" "}
           (Switch to 2D and press &ldquo;Load demo office&rdquo;) to see a
           subject walk a preset path through the building with cameras picking
           them up in real time. Custom path drawing comes in the next

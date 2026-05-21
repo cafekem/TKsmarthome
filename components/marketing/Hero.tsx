@@ -107,8 +107,9 @@ export function Hero() {
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes hero-mockup-in {
-  from { opacity: 0; transform: translateY(60px) scale(0.94); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  0%   { opacity: 0; transform: translateY(120px) scale(0.92); filter: blur(4px); }
+  35%  { opacity: 0.75; filter: blur(0px); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0px); }
 }
 `,
         }}
@@ -168,11 +169,11 @@ export function Hero() {
 
         {/* ── Product mockup — macOS window frame ── */}
         <div
-          className="relative mt-16 w-full max-w-5xl sm:mt-20"
+          className="relative mt-10 w-full max-w-5xl sm:mt-12"
           style={{
             opacity: 0,
             animation:
-              "hero-mockup-in 1.1s cubic-bezier(0.16, 0.77, 0.29, 0.98) 0.85s forwards",
+              "hero-mockup-in 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.8s forwards",
           }}
         >
           {/* Subtle shadow behind the mockup */}

@@ -22,6 +22,11 @@ interface ToolbarProps {
   onUpload: () => void;
 }
 
+/**
+ * Floating toolbar — refined as a single column rail with subtle
+ * background instead of a hard "card on canvas" look. Tools group
+ * by purpose with gentle whitespace, not visible dividers.
+ */
 export function Canvas2DToolbar({ onFit, onUpload }: ToolbarProps) {
   const tool = useDesignStore((s) => s.tool);
   const setTool = useDesignStore((s) => s.setTool);
@@ -31,83 +36,89 @@ export function Canvas2DToolbar({ onFit, onUpload }: ToolbarProps) {
   const { redo, canRedo } = useDesignStoreRedo();
 
   return (
-    <div className="absolute left-3 top-3 z-20 flex flex-col gap-1.5 rounded-xl border border-border bg-card/85 p-1.5 shadow-2xl backdrop-blur">
-      <ToolGroup>
-        <ToolButton
-          icon={MousePointer2}
-          label="Select (V)"
-          active={tool === "select"}
-          onClick={() => setTool("select")}
-        />
-        <ToolButton
-          icon={Square}
-          label="Draw wall (W)"
-          active={tool === "wall"}
-          onClick={() => setTool("wall")}
-        />
-        <ToolButton
-          icon={Ruler}
-          label="Calibrate scale (C)"
-          active={tool === "calibrate"}
-          onClick={() => setTool("calibrate")}
-        />
-      </ToolGroup>
+    <div className="absolute left-3 top-3 z-20 flex flex-col gap-0.5 rounded-2xl bg-background/55 p-1 backdrop-blur-xl ring-1 ring-black/[0.04] dark:ring-white/[0.05] shadow-[0_4px_24px_-12px_rgba(0,0,0,0.18)]">
+      <ToolButton
+        icon={MousePointer2}
+        label="Select"
+        shortcut="V"
+        active={tool === "select"}
+        onClick={() => setTool("select")}
+      />
+      <ToolButton
+        icon={Square}
+        label="Draw wall"
+        shortcut="W"
+        active={tool === "wall"}
+        onClick={() => setTool("wall")}
+      />
+      <ToolButton
+        icon={Ruler}
+        label="Calibrate scale"
+        shortcut="C"
+        active={tool === "calibrate"}
+        onClick={() => setTool("calibrate")}
+      />
 
-      <Divider />
+      <Spacer />
 
-      <ToolGroup>
-        <ToolButton icon={ImagePlus} label="Upload floor plan" onClick={onUpload} />
-        <ToolButton icon={Maximize} label="Fit to content (F)" onClick={onFit} />
-        <ToolButton
-          icon={showCoverage ? Eye : EyeOff}
-          label={showCoverage ? "Hide coverage" : "Show coverage"}
-          onClick={toggleCoverage}
-          highlighted={!showCoverage}
-        />
-      </ToolGroup>
+      <ToolButton
+        icon={ImagePlus}
+        label="Upload floor plan"
+        onClick={onUpload}
+      />
+      <ToolButton
+        icon={Maximize}
+        label="Fit to content"
+        shortcut="F"
+        onClick={onFit}
+      />
+      <ToolButton
+        icon={showCoverage ? Eye : EyeOff}
+        label={showCoverage ? "Hide coverage" : "Show coverage"}
+        onClick={toggleCoverage}
+        muted={!showCoverage}
+      />
 
-      <Divider />
+      <Spacer />
 
-      <ToolGroup>
-        <ToolButton
-          icon={Undo2}
-          label="Undo (⌘Z)"
-          onClick={undo}
-          disabled={!canUndo}
-        />
-        <ToolButton
-          icon={Redo2}
-          label="Redo (⌘⇧Z)"
-          onClick={redo}
-          disabled={!canRedo}
-        />
-      </ToolGroup>
+      <ToolButton
+        icon={Undo2}
+        label="Undo"
+        shortcut="⌘Z"
+        onClick={undo}
+        disabled={!canUndo}
+      />
+      <ToolButton
+        icon={Redo2}
+        label="Redo"
+        shortcut="⌘⇧Z"
+        onClick={redo}
+        disabled={!canRedo}
+      />
     </div>
   );
 }
 
-function ToolGroup({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-col gap-1">{children}</div>;
-}
-
-function Divider() {
-  return <div className="h-px w-full bg-border/60" />;
+function Spacer() {
+  return <div className="h-2" aria-hidden="true" />;
 }
 
 function ToolButton({
   icon: Icon,
   label,
+  shortcut,
   active,
   onClick,
   disabled,
-  highlighted,
+  muted,
 }: {
   icon: LucideIcon;
   label: string;
+  shortcut?: string;
   active?: boolean;
   onClick: () => void;
   disabled?: boolean;
-  highlighted?: boolean;
+  muted?: boolean;
 }) {
   return (
     <Tooltip>
@@ -117,21 +128,31 @@ function ToolButton({
             type="button"
             disabled={disabled}
             onClick={onClick}
+            aria-label={label}
             className={cn(
-              "flex size-9 items-center justify-center rounded-lg border transition-colors",
-              "disabled:opacity-40 disabled:cursor-not-allowed",
+              "flex size-9 items-center justify-center rounded-xl transition-all duration-150",
+              "disabled:opacity-30 disabled:cursor-not-allowed",
               active
-                ? "border-primary bg-primary/20 text-primary"
-                : highlighted
-                  ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent"
+                ? "bg-primary/15 text-primary ring-1 ring-primary/30 shadow-[inset_0_1px_0_oklch(1_0_0/8%)]"
+                : muted
+                  ? "text-muted-foreground/60 hover:text-foreground hover:bg-foreground/[0.06]"
+                  : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06]"
             )}
           >
-            <Icon className="size-4" />
+            <Icon className="size-[17px]" strokeWidth={1.7} />
           </button>
         }
       />
-      <TooltipContent side="right">{label}</TooltipContent>
+      <TooltipContent side="right" sideOffset={8}>
+        <span className="flex items-center gap-2">
+          <span>{label}</span>
+          {shortcut && (
+            <kbd className="rounded border border-border/40 bg-background/40 px-1 py-px font-mono text-[10px] text-muted-foreground">
+              {shortcut}
+            </kbd>
+          )}
+        </span>
+      </TooltipContent>
     </Tooltip>
   );
 }

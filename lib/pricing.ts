@@ -62,6 +62,13 @@ export function modelFor(device: Device): ModelEntry {
   return FALLBACK_MODELS[subtypeOf(device)] ?? FALLBACK_MODELS.dome;
 }
 
+export interface ExtraLineItem {
+  description: string;
+  quantity: number;
+  unitCost: number;
+  category: "labor" | "materials" | "permits" | "logistics" | "other";
+}
+
 export interface QuoteSettings {
   laborRate: number;
   cablingPerCamera: number;
@@ -71,6 +78,18 @@ export interface QuoteSettings {
   taxPct: number;
   preparedBy: string;
   clientName: string;
+  /** Project location used by the AI Quote Assistant. Display + cost driver. */
+  projectLocation: string;
+  /** Set when the AI Quote Assistant has overridden the rates above. */
+  aiAdjusted: boolean;
+  /** Short regional pricing note from the AI. Shown above the BoM. */
+  regionalNotes: string;
+  /** Benchmark sentence comparing this quote to local market median. */
+  benchmark: string;
+  /** Client-facing narrative paragraph injected into the printed quote. */
+  narrative: string;
+  /** Extra line items added by the AI (permits, lift rental, premiums, etc.) */
+  extraLineItems: ExtraLineItem[];
 }
 
 export const DEFAULT_QUOTE_SETTINGS: QuoteSettings = {
@@ -82,6 +101,12 @@ export const DEFAULT_QUOTE_SETTINGS: QuoteSettings = {
   taxPct: 8.5,
   preparedBy: "",
   clientName: "",
+  projectLocation: "",
+  aiAdjusted: false,
+  regionalNotes: "",
+  benchmark: "",
+  narrative: "",
+  extraLineItems: [],
 };
 
 export interface BoMRow {
@@ -102,6 +127,8 @@ export interface QuoteBreakdown {
   laborSubtotal: number;
   cablingSubtotal: number;
   commissioningFee: number;
+  /** Sum of AI-added line items, broken out so the UI can render them */
+  extraLineItemsSubtotal: number;
   preTaxSubtotal: number;
   markupAmount: number;
   taxAmount: number;
@@ -159,8 +186,19 @@ export function computeQuote(
       readerCount * settings.cablingPerReader
   );
 
+  const extraLineItemsSubtotal = round2(
+    (settings.extraLineItems ?? []).reduce(
+      (sum, item) => sum + item.quantity * item.unitCost,
+      0,
+    ),
+  );
+
   const baseSubtotal = round2(
-    hardwareSubtotal + laborSubtotal + cablingSubtotal + settings.commissioningFee
+    hardwareSubtotal +
+      laborSubtotal +
+      cablingSubtotal +
+      settings.commissioningFee +
+      extraLineItemsSubtotal,
   );
   const markupAmount = round2((baseSubtotal * settings.markupPct) / 100);
   const preTaxSubtotal = round2(baseSubtotal + markupAmount);
@@ -174,6 +212,7 @@ export function computeQuote(
     laborSubtotal,
     cablingSubtotal,
     commissioningFee: settings.commissioningFee,
+    extraLineItemsSubtotal,
     preTaxSubtotal,
     markupAmount,
     taxAmount,

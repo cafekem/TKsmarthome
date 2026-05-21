@@ -541,11 +541,19 @@ function Device3D({
         onSelect();
       }}
     >
-      {/* Mounting pole from floor to device — short stub if the device has a
-         wall mount of its own; full pole otherwise. */}
-      <mesh position={[0, -py / 2, 0]}>
-        <cylinderGeometry args={[0.018, 0.028, py, 12]} />
-        <meshStandardMaterial color="#3f3f46" roughness={0.55} metalness={0.4} />
+      {/* Drop indicator on the floor — subtle ring directly below the device
+         shows the mount projection without the unrealistic floor-to-ceiling pole. */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -py + 0.008, 0]}
+      >
+        <ringGeometry args={[0.06, 0.085, 24]} />
+        <meshBasicMaterial
+          color={accent}
+          transparent
+          opacity={0.35}
+          side={THREE.DoubleSide}
+        />
       </mesh>
 
       <DeviceMesh

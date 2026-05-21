@@ -1,0 +1,155 @@
+DeeperVision — Deployment Notes
+================================
+
+Last updated: 2026-05-21
+
+PRODUCTION URL
+--------------
+https://deeper-vision-self.vercel.app
+
+(Vercel auto-aliases this to the latest production deployment. Each individual
+deployment also gets a unique URL like
+https://deeper-vision-<hash>-mohosys-projects.vercel.app.)
+
+REPOSITORY
+----------
+GitHub: https://github.com/mohosy/DeeperVision
+Default branch: main
+
+The deployed code on Vercel reflects whatever was pushed via `vercel --prod`
+from the local worktree. The GitHub `main` branch should mirror that — if you
+ever find them out of sync, push the local branch to `main` before assuming
+either is canonical.
+
+VERCEL PROJECT
+--------------
+Org:        mohosys-projects
+Project:    deeper-vision
+Project ID: prj_wU4rzxZix2uxxtgiIcSRINXJByDS
+
+The .vercel/project.json file in the repo root pins this project link so the
+CLI knows where to deploy. Do NOT commit anything else under .vercel/ — it's
+listed in .vercel/README.txt as ignored, and project.json is the only file
+that should be in git.
+
+ENV VARS (Vercel)
+-----------------
+Production:
+  ANTHROPIC_API_KEY  — required by /api/ai/survey and /api/ai/quote routes.
+                       Stored as a "sensitive" env var. Get one at
+                       https://console.anthropic.com/settings/keys.
+
+Set via CLI:
+  printf '<key>' | vercel env add ANTHROPIC_API_KEY production --sensitive
+
+Or via dashboard:
+  https://vercel.com/mohosys-projects/deeper-vision/settings/environment-variables
+
+LOCAL DEV
+---------
+1. Install deps (pnpm is required — the lockfile is pnpm-lock.yaml):
+     pnpm install
+
+2. Create .env.local with your Anthropic key (gitignored already):
+     echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env.local
+
+3. Start dev server (Turbopack, port 3099 is what we usually use):
+     npx next dev --turbopack -p 3099
+
+   Or just `pnpm dev` if you prefer the default port 3000.
+
+4. The dev server picks up .env.local at startup. If you write it AFTER
+   the server is already running, restart the server.
+
+DEPLOY (one-off, from your terminal)
+------------------------------------
+From the repo root or worktree:
+
+  # Preview deployment
+  vercel --yes
+
+  # Production deployment (aliases deeper-vision-self.vercel.app)
+  vercel --prod --yes
+
+If a worktree is missing the .vercel/project.json link, copy it from the
+parent repo:
+  mkdir -p .vercel
+  echo '{"projectId":"prj_wU4rzxZix2uxxtgiIcSRINXJByDS","orgId":"team_db7MzOIgggmc3bSDJnYHVv54","projectName":"deeper-vision"}' > .vercel/project.json
+
+WHAT'S DEPLOYED RIGHT NOW
+-------------------------
+Landing page:
+  - Mountain-landscape hero with word-by-word slide-up animation
+  - 3D mockup with slide-up + blur-clear entrance animation
+  - "DeeperVision" branding (one word), layered-chevrons logo mark
+
+Editor (/design/new):
+  - 2D Konva canvas + 3D React-Three-Fiber scene + Sim mode
+  - Empty state with three actions: "Generate with AI" (primary),
+    "Upload plan", "Try the demo"
+  - Library panel with real catalog (Avigilon, Axis, Bosch, Hanwha, Verkada)
+  - Multi-sensor camera support with per-lens FOV/range editing
+  - Wall-snapping: cameras/readers/sensors snap perpendicular to nearest
+    wall when dragged (uses Konva's dragBoundFunc)
+  - Refined device markers, blue color palette (not the original green)
+  - Top bar: design-name input, mode switcher (sliding pill), AI shortcut,
+    File / Export / Quote (Quote = primary)
+  - Status bar with humanized stats and active-mode pill
+  - PDF + CSV export, sim banner with timeline scrubber
+
+AI features (all use Claude Sonnet 4.5 with tool-use):
+  POST /api/ai/survey
+    - Inputs: floor plan image (base64) + optional building type + notes
+    - Outputs: estimated scale, walls, devices, summary
+    - Cost: ~$0.18/survey, ~70s
+    - UI: "Generate design with AI" dialog on empty state + ✨ AI button in
+      top bar
+
+  POST /api/ai/quote
+    - Inputs: design summary + ZIP/city
+    - Outputs: location-adjusted labor, tax, cabling, commissioning;
+      extra line items (permits, lift rental, after-hours); regional notes;
+      benchmark sentence; client-facing narrative
+    - Cost: ~$0.03/quote, ~20s
+    - UI: "Location-aware AI estimate" panel inside the Quote drawer
+
+NOT YET BUILT (tracked in TaskList)
+-----------------------------------
+- #6: Chat-driven editor (right-side panel; Claude calls add_device /
+      move_device / replace_device via tool-use)
+- #8: AI Coverage Advisor (one-click "analyze design" → blind-spot punch
+      list with one-click apply)
+
+ERROR HANDLING
+--------------
+Both AI routes wrap the Anthropic SDK calls in try/catch and return
+upstream errors as JSON so the UI can show actionable messages. If you
+ever see a generic "Survey request failed" toast, the underlying message
+is now in the response body — most commonly:
+  "Your credit balance is too low to access the Anthropic API."
+  → top up at https://console.anthropic.com/settings/billing
+
+GOTCHAS / THINGS THAT WILL BITE YOU
+-----------------------------------
+1. Don't commit .env.local. It's in .gitignore already as `.env*`.
+2. Don't commit the test fixture sample-floor-plan.png if you regenerate it.
+3. pnpm-lock.yaml is the source of truth. If you ever see a package-lock.json,
+   delete it before deploying — Vercel uses pnpm based on the lockfile and
+   chokes on the npm one.
+4. The /api/ai/survey route uses Claude with vision, so the image must be
+   PNG/JPG/WebP/GIF (NOT PDF). The dialog enforces this.
+5. The dialog's file input is INSIDE a fixed-position overlay. If you're
+   programmatically uploading via DataTransfer, scope your querySelector to
+   `.fixed.inset-0` so you don't accidentally hit the toolbar's plan-upload
+   input by mistake.
+6. The "Untitled design" input in the top bar is editable but only shows a
+   pencil icon on hover — that's by design.
+
+QUICK SANITY CHECKS
+-------------------
+After deploy, hit these to confirm:
+  1. https://deeper-vision-self.vercel.app/                  → landing loads
+  2. https://deeper-vision-self.vercel.app/design/new        → editor loads
+  3. POST /api/ai/survey with a tiny JSON body → 400 (validation works)
+  4. Empty state → "Generate with AI" → dialog opens
+  5. Quote drawer → AI estimate panel visible with location input

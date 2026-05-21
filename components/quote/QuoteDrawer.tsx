@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
-import { Printer, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Loader2, Printer, Sparkles, X } from "lucide-react";
+import { toast } from "sonner";
 import {
   useActiveFloor,
   useCurrentDesign,
   useDesignStore,
 } from "@/lib/store";
 import { computeQuote, formatUSD } from "@/lib/pricing";
+import { runAIQuote, summarizeFloorForQuote } from "@/lib/ai-quote";
 import { cn } from "@/lib/utils";
 
 interface QuoteDrawerProps {
@@ -25,6 +27,68 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
     () => (floor ? computeQuote(floor, quoteSettings) : null),
     [floor, quoteSettings]
   );
+
+  // AI Quote dialog state
+  const [aiQuoteRunning, setAiQuoteRunning] = useState(false);
+  const [locationDraft, setLocationDraft] = useState(
+    quoteSettings.projectLocation,
+  );
+
+  async function runAIEstimate() {
+    if (!floor || !design) return;
+    const loc = locationDraft.trim();
+    if (!loc) {
+      toast.error("Add a project location first (ZIP or city, state).");
+      return;
+    }
+    setAiQuoteRunning(true);
+    try {
+      const summary = summarizeFloorForQuote(floor);
+      const result = await runAIQuote({
+        designName: design.name,
+        location: loc,
+        deviceCounts: summary.deviceCounts,
+        floorAreaSqMeters: summary.floorAreaSqMeters,
+        wallCount: summary.wallCount,
+      });
+      updateQuoteSettings({
+        projectLocation: loc,
+        laborRate: result.rates.laborHourly,
+        cablingPerCamera: result.rates.cablingPerCamera,
+        cablingPerReader: result.rates.cablingPerReader,
+        commissioningFee: result.rates.commissioningFee,
+        taxPct: result.rates.taxPercentage,
+        markupPct: result.rates.suggestedMarkupPct,
+        regionalNotes: result.regionalNotes,
+        benchmark: result.benchmark,
+        narrative: result.narrative,
+        extraLineItems: result.extraLineItems,
+        aiAdjusted: true,
+      });
+      toast.success("Quote updated with location-aware pricing", {
+        description: result.benchmark || "Rates adjusted for this region.",
+      });
+    } catch (err) {
+      toast.error("AI estimate failed", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setAiQuoteRunning(false);
+    }
+  }
+
+  function clearAIEstimate() {
+    updateQuoteSettings({
+      aiAdjusted: false,
+      regionalNotes: "",
+      benchmark: "",
+      narrative: "",
+      extraLineItems: [],
+    });
+    toast.success("AI adjustments cleared", {
+      description: "Reverted to manual quote settings.",
+    });
+  }
 
   if (!open) return null;
 
@@ -111,6 +175,12 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
                 )}
               </div>
             </div>
+            {/* AI narrative paragraph — shows in the printed PDF */}
+            {quoteSettings.narrative && (
+              <div className="mt-5 text-[0.92rem] leading-relaxed text-black/80">
+                {quoteSettings.narrative}
+              </div>
+            )}
           </div>
 
           {/* Client + prepared-by inputs (screen only) */}
@@ -128,6 +198,83 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
               onChange={(v) => updateQuoteSettings({ preparedBy: v })}
             />
           </div>
+
+          {/* AI Quote Assistant — screen only */}
+          <section className="print:hidden">
+            <div
+              className={cn(
+                "rounded-xl border bg-card/40 p-4 transition-colors",
+                quoteSettings.aiAdjusted
+                  ? "border-primary/40 bg-primary/[0.04]"
+                  : "border-border",
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+                    <Sparkles className="size-3.5" strokeWidth={1.7} />
+                  </div>
+                  <div>
+                    <div className="text-[0.88rem] font-semibold tracking-[-0.01em]">
+                      Location-aware AI estimate
+                    </div>
+                    <div className="mt-0.5 text-[0.76rem] text-muted-foreground leading-snug">
+                      {quoteSettings.aiAdjusted
+                        ? `Rates adjusted for ${quoteSettings.projectLocation}. Edit anything you want — your numbers are still in charge.`
+                        : "Labor rates, tax, and permit costs vary widely by region. Enter a ZIP or city to get a localised quote."}
+                    </div>
+                  </div>
+                </div>
+                {quoteSettings.aiAdjusted && (
+                  <button
+                    type="button"
+                    onClick={clearAIEstimate}
+                    className="shrink-0 rounded-md px-2 py-1 text-[0.72rem] font-medium text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  value={locationDraft}
+                  onChange={(e) => setLocationDraft(e.target.value)}
+                  placeholder="e.g. Brooklyn, NY · 11201 · Austin TX"
+                  disabled={aiQuoteRunning}
+                  className="min-w-0 flex-1 rounded-md border border-border bg-background/50 px-3 py-1.5 text-[0.85rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  onClick={runAIEstimate}
+                  disabled={aiQuoteRunning || !floor}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3.5 py-1.5 text-[0.82rem] font-medium text-primary-foreground shadow-[0_4px_14px_-6px_oklch(0.55_0.17_245/55%)] hover:bg-primary/90 disabled:opacity-50 disabled:hover:bg-primary"
+                >
+                  {aiQuoteRunning ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      Estimating…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-3.5" />
+                      {quoteSettings.aiAdjusted ? "Re-estimate" : "Get estimate"}
+                    </>
+                  )}
+                </button>
+              </div>
+              {quoteSettings.aiAdjusted && quoteSettings.regionalNotes && (
+                <div className="mt-3 rounded-md bg-foreground/[0.04] px-3 py-2 text-[0.76rem] text-foreground/80 leading-relaxed">
+                  <span className="font-medium text-foreground/90">Note: </span>
+                  {quoteSettings.regionalNotes}
+                </div>
+              )}
+              {quoteSettings.aiAdjusted && quoteSettings.benchmark && (
+                <div className="mt-2 text-[0.76rem] text-muted-foreground italic">
+                  {quoteSettings.benchmark}
+                </div>
+              )}
+            </div>
+          </section>
 
           {/* Bill of Materials */}
           <section>
@@ -219,6 +366,39 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
               </div>
             </section>
           )}
+
+          {/* AI-added extra line items (permits, lift rental, premiums, etc.) */}
+          {breakdown &&
+            quoteSettings.extraLineItems &&
+            quoteSettings.extraLineItems.length > 0 && (
+              <section>
+                <SectionHeading>
+                  Regional &amp; project-specific
+                </SectionHeading>
+                <div className="mt-3 rounded-lg border border-border print:border-black/15 print:rounded-md">
+                  {quoteSettings.extraLineItems.map((item, i) => {
+                    const last = i === quoteSettings.extraLineItems.length - 1;
+                    return (
+                      <LineItem
+                        key={`${item.description}-${i}`}
+                        label={
+                          item.quantity > 1
+                            ? `${item.description} (${item.quantity} × ${formatUSD(item.unitCost)})`
+                            : item.description
+                        }
+                        value={item.quantity * item.unitCost}
+                        divider={!last}
+                        smallLabel={
+                          <span className="ml-2 rounded-full bg-muted/60 px-1.5 py-0.5 text-[0.6rem] uppercase tracking-wider text-muted-foreground">
+                            {item.category}
+                          </span>
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
           {/* Editable rates (screen only) */}
           <section className="print:hidden">
@@ -318,11 +498,13 @@ function LineItem({
   value,
   bold,
   divider = true,
+  smallLabel,
 }: {
   label: string;
   value: number;
   bold?: boolean;
   divider?: boolean;
+  smallLabel?: React.ReactNode;
 }) {
   return (
     <div
@@ -331,8 +513,14 @@ function LineItem({
         divider && "border-b border-border/60 print:border-black/10"
       )}
     >
-      <span className={bold ? "font-medium" : "text-muted-foreground print:text-black/70"}>
+      <span
+        className={cn(
+          "inline-flex items-baseline",
+          bold ? "font-medium" : "text-muted-foreground print:text-black/70",
+        )}
+      >
         {label}
+        {smallLabel}
       </span>
       <span
         className={cn(

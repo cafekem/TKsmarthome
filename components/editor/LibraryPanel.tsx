@@ -18,17 +18,17 @@ const TYPE_TONE: Record<
   { dot: string; pill: string; shadow: string }
 > = {
   camera: {
-    dot: "bg-emerald-400",
-    pill: "text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/20",
-    shadow: "hover:shadow-[0_10px_28px_-14px_oklch(0.7_0.16_158/40%)]",
+    dot: "bg-blue-500",
+    pill: "text-blue-700 dark:text-blue-300 bg-blue-500/10 border-blue-500/20",
+    shadow: "hover:shadow-[0_10px_28px_-14px_oklch(0.6_0.17_245/45%)]",
   },
   reader: {
-    dot: "bg-sky-400",
+    dot: "bg-sky-500",
     pill: "text-sky-700 dark:text-sky-300 bg-sky-500/10 border-sky-500/20",
     shadow: "hover:shadow-[0_10px_28px_-14px_oklch(0.65_0.16_230/40%)]",
   },
   sensor: {
-    dot: "bg-amber-400",
+    dot: "bg-amber-500",
     pill: "text-amber-700 dark:text-amber-300 bg-amber-500/10 border-amber-500/20",
     shadow: "hover:shadow-[0_10px_28px_-14px_oklch(0.75_0.16_80/45%)]",
   },
@@ -68,7 +68,7 @@ type CategoryKey = "camera" | "reader" | "sensor" | "network";
 
 const CATEGORIES: { key: CategoryKey; label: string }[] = [
   { key: "camera", label: "Cameras" },
-  { key: "reader", label: "Access Control" },
+  { key: "reader", label: "Access" },
   { key: "sensor", label: "Sensors" },
   { key: "network", label: "Network" },
 ];
@@ -146,11 +146,11 @@ export function LibraryPanel() {
     <aside className="flex flex-col h-full border-r border-border/70 bg-sidebar">
       <div className="border-b border-border/70 px-3 py-3.5">
         <div className="mb-2.5 flex items-baseline justify-between">
-          <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Product library
+          <div className="text-[0.92rem] font-semibold tracking-[-0.01em] text-foreground">
+            Library
           </div>
-          <div className="text-[0.62rem] font-mono uppercase tracking-[0.12em] text-muted-foreground/70">
-            drag → canvas
+          <div className="text-[0.7rem] text-muted-foreground/70">
+            Drag onto canvas
           </div>
         </div>
         <div className="relative">
@@ -175,14 +175,17 @@ export function LibraryPanel() {
                 type="button"
                 onClick={() => setActiveCategory(cat.key)}
                 className={cn(
-                  "flex-1 px-1 py-2 text-[0.62rem] font-semibold uppercase tracking-[0.1em] transition-colors",
+                  "flex-1 inline-flex items-center justify-center gap-1.5 px-1 py-2.5 text-[0.74rem] font-medium tracking-[-0.005em] transition-colors relative",
                   isActive
-                    ? "text-foreground border-b-2 border-primary"
-                    : "text-muted-foreground/70 hover:text-muted-foreground",
+                    ? "text-foreground"
+                    : "text-muted-foreground/80 hover:text-foreground",
                 )}
               >
-                <span className={cn("mr-1 inline-block size-1.5 rounded-full", isActive ? tone.dot : "bg-muted-foreground/30")} />
+                <span className={cn("inline-block size-1.5 rounded-full transition-colors", isActive ? tone.dot : "bg-muted-foreground/30")} />
                 {cat.label}
+                {isActive && (
+                  <span className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-primary" />
+                )}
               </button>
             );
           })}
@@ -196,7 +199,7 @@ export function LibraryPanel() {
               {isSearching ? (
                 <>
                   <div className="mb-1">No products match</div>
-                  <div className="font-serif-italic text-foreground/70">
+                  <div className="font-medium text-foreground/80">
                     &ldquo;{query}&rdquo;
                   </div>
                 </>
@@ -230,7 +233,7 @@ export function LibraryPanel() {
                 </button>
 
                 {isOpen && (
-                  <div className="ml-2 space-y-1 pb-2">
+                  <div className="ml-1 space-y-1 pb-2">
                     {products.map((product) => {
                       const tone = TYPE_TONE[product.category];
                       const preview = SUBCATEGORY_TO_PREVIEW[product.subcategory] ?? { type: "camera", subtype: "dome" };
@@ -242,40 +245,53 @@ export function LibraryPanel() {
                           draggable
                           onDragStart={(e) => handleDragStart(e, product)}
                           className={cn(
-                            "group relative flex w-full items-center gap-2.5 overflow-hidden rounded-xl border border-border/70",
-                            "bg-card/40 px-2.5 py-2 text-left",
-                            "transition-[transform,background-color,border-color,box-shadow] duration-200",
-                            "hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card",
-                            tone.shadow,
-                            "active:translate-y-0 active:scale-[0.99] cursor-grab active:cursor-grabbing",
+                            "group relative flex w-full items-center gap-3 overflow-hidden rounded-xl",
+                            "bg-card/30 px-2.5 py-2 text-left ring-1 ring-border/40",
+                            "transition-[transform,background-color,box-shadow,ring] duration-200",
+                            "hover:bg-card hover:ring-border hover:shadow-[0_4px_18px_-10px_rgba(0,0,0,0.18)]",
+                            "active:scale-[0.99] cursor-grab active:cursor-grabbing",
                           )}
                         >
-                          <div className="relative size-12 shrink-0 overflow-hidden rounded-lg shadow-[inset_0_0_0_1px_rgb(0_0_0_/_8%),0_1px_3px_-1px_rgb(0_0_0_/_15%)]">
+                          <div className="relative size-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-black/[0.06] dark:ring-white/[0.04]">
                             <DevicePreview3D kind={preview} />
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <span className="truncate text-[0.8rem] font-medium tracking-[-0.005em]">
+                              <span className="truncate text-[0.84rem] font-medium tracking-[-0.005em] text-foreground/95">
                                 {product.model}
                               </span>
-                              <span className={cn(
-                                "shrink-0 rounded-full border px-1.5 py-0 text-[0.55rem] font-mono leading-relaxed",
-                                tone.pill,
-                              )}>
+                              <span
+                                className={cn(
+                                  "shrink-0 inline-flex items-center gap-1 text-[0.62rem] tracking-[-0.005em] text-muted-foreground",
+                                )}
+                              >
+                                <span className={cn("size-1 rounded-full", tone.dot)} />
                                 {product.subcategory}
                               </span>
                             </div>
-                            <div className="truncate text-[0.68rem] text-muted-foreground/85">
-                              {product.description}
-                            </div>
-                            <div className="mt-0.5 text-[0.62rem] font-mono text-muted-foreground/60">
-                              {formatPrice(product.streetPrice)}
+                            <div className="mt-0.5 flex items-center gap-2 text-[0.7rem] text-muted-foreground/75">
+                              <span className="truncate">{product.description}</span>
                             </div>
                           </div>
-                          <div className="flex shrink-0 flex-col gap-0.5 opacity-0 transition-opacity group-hover:opacity-50">
-                            <span className="size-1 rounded-full bg-current" />
-                            <span className="size-1 rounded-full bg-current" />
-                            <span className="size-1 rounded-full bg-current" />
+                          <div className="flex shrink-0 items-center gap-1.5 text-[0.7rem] text-muted-foreground/60 tabular-nums">
+                            {formatPrice(product.streetPrice)}
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.8}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="size-3.5 opacity-0 transition-opacity group-hover:opacity-60"
+                              aria-hidden="true"
+                            >
+                              <circle cx="9" cy="6" r="1" />
+                              <circle cx="9" cy="12" r="1" />
+                              <circle cx="9" cy="18" r="1" />
+                              <circle cx="15" cy="6" r="1" />
+                              <circle cx="15" cy="12" r="1" />
+                              <circle cx="15" cy="18" r="1" />
+                            </svg>
                           </div>
                         </button>
                       );

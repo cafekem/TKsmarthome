@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
 import type { DeviceType, Vec2 } from "@/types/design";
 import { getProduct } from "@/lib/catalog";
-import { distance, screenToDesign } from "@/lib/geometry";
+import { distance, screenToDesign, snapToNearestWall } from "@/lib/geometry";
 import { useImage } from "./useImage";
 import { DeviceShape } from "./DeviceShape";
 
@@ -54,6 +54,10 @@ export function Canvas2DStage({
   const [pendingCalibration, setPendingCalibration] = useState<
     { a: Vec2; b: Vec2 } | null
   >(null);
+
+  // AI survey dialog open/close lives in the design store so it's reachable
+  // from anywhere (TopBar, empty state, etc.)
+  const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
 
   // Fit-on-load: when we load a floor or its image, center the content.
   useEffect(() => {
@@ -188,7 +192,33 @@ export function Canvas2DStage({
       const payload = JSON.parse(raw) as { type: DeviceType; catalogId?: string };
       const point = getDesignPoint(e.clientX, e.clientY);
       const product = payload.catalogId ? getProduct(payload.catalogId) : undefined;
-      addDevice(floor.id, payload.type, point, product);
+
+      // Wall-snap on drop: if the user dropped near a wall and the device
+      // type is wall-mountable, place it on the wall and orient it perpendicular.
+      const wallMountable =
+        payload.type === "camera" ||
+        payload.type === "reader" ||
+        payload.type === "sensor";
+      let finalPoint = point;
+      let finalRotation: number | undefined = undefined;
+      if (wallMountable && floor.walls.length > 0) {
+        const snapThresholdPx = Math.max(28, floor.scale * 0.7);
+        const snap = snapToNearestWall(
+          point,
+          floor.walls,
+          snapThresholdPx,
+          Math.max(8, floor.scale * 0.18),
+        );
+        if (snap) {
+          finalPoint = snap.position;
+          finalRotation = snap.rotation;
+        }
+      }
+
+      const created = addDevice(floor.id, payload.type, finalPoint, product);
+      if (finalRotation !== undefined && created?.id) {
+        updateDevice(floor.id, created.id, { rotation: finalRotation });
+      }
     } catch {
       // ignore
     }
@@ -254,9 +284,28 @@ export function Canvas2DStage({
         e.dataTransfer.dropEffect = "copy";
       }}
     >
+      {/* Atmospheric wash — subtle blue radial vignette */}
+      <div
+        className="pointer-events-none absolute inset-0 z-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% 35%, color-mix(in oklch, var(--primary) 5%, transparent) 0%, transparent 65%)",
+        }}
+        aria-hidden="true"
+      />
+      {/* Edge fade — slight darkening at the outer edges adds depth */}
+      <div
+        className="pointer-events-none absolute inset-0 z-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 95% 95% at 50% 50%, transparent 55%, rgba(0,0,0,0.04) 100%)",
+        }}
+        aria-hidden="true"
+      />
       {!planImage && floor.devices.length === 0 && floor.walls.length === 0 && (
         <FloorPlanEmptyState
           onUpload={onRequestUpload}
+          onGenerateAI={() => setAISurveyOpen(true)}
           onLoadDemo={() => {
             useDesignStore.getState().loadDemo();
             toast.success("Demo office loaded", {
@@ -321,7 +370,7 @@ export function Canvas2DStage({
                 pendingCursor.x,
                 pendingCursor.y,
               ]}
-              stroke="#34d399"
+              stroke="#3b82f6"
               strokeWidth={3}
               lineCap="round"
               dash={[6, 6]}
@@ -336,7 +385,7 @@ export function Canvas2DStage({
               x={calibrationPoints[0].x}
               y={calibrationPoints[0].y}
               radius={6}
-              fill="#34d399"
+              fill="#3b82f6"
               listening={false}
             />
           )}
@@ -349,6 +398,7 @@ export function Canvas2DStage({
               scalePxPerMeter={scalePxPerMeter}
               selected={device.id === selectedId}
               showCoverage={showCoverage}
+              walls={floor.walls}
               onSelect={() => selectDevice(device.id)}
               onMove={(x, y) =>
                 updateDevice(floor.id, device.id, { position: { x, y } })
@@ -389,57 +439,126 @@ export function Canvas2DStage({
 function FloorPlanEmptyState({
   onUpload,
   onLoadDemo,
+  onGenerateAI,
 }: {
   onUpload: () => void;
   onLoadDemo: () => void;
+  onGenerateAI: () => void;
 }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-      <div className="pointer-events-auto flex max-w-md flex-col items-center gap-5 rounded-2xl border border-dashed border-border surface-card px-10 py-12 text-center">
-        <div className="flex size-14 items-center justify-center rounded-xl border border-border bg-background/40 shadow-[inset_0_1px_0_oklch(1_0_0/5%)]">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.6}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="size-6 text-primary"
-          >
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <circle cx="9" cy="9" r="2" />
-            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-          </svg>
+      {/* Decorative blueprint outline — establishes context without a "card" */}
+      <svg
+        viewBox="0 0 600 360"
+        fill="none"
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 m-auto h-[68%] max-h-[460px] w-auto opacity-[0.18] dark:opacity-[0.22]"
+      >
+        <defs>
+          <linearGradient id="bp-stroke" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0.3" />
+          </linearGradient>
+        </defs>
+        {/* outer walls */}
+        <path
+          d="M40 60 L40 320 L560 320 L560 60 Z"
+          stroke="url(#bp-stroke)"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {/* interior walls */}
+        <path
+          d="M240 60 L240 200 M40 200 L240 200 M340 200 L560 200 M340 200 L340 320 M440 60 L440 200"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeOpacity="0.75"
+        />
+        {/* a door swing */}
+        <path
+          d="M240 180 A20 20 0 0 1 260 200"
+          stroke="currentColor"
+          strokeWidth="1"
+          strokeOpacity="0.55"
+          fill="none"
+        />
+        {/* devices as small circles */}
+        <circle cx="140" cy="130" r="3.5" fill="currentColor" opacity="0.7" />
+        <circle cx="380" cy="120" r="3.5" fill="currentColor" opacity="0.7" />
+        <circle cx="500" cy="260" r="3.5" fill="currentColor" opacity="0.7" />
+        <circle cx="150" cy="270" r="3.5" fill="currentColor" opacity="0.7" />
+        {/* faint FOV cone */}
+        <path
+          d="M140 130 L80 80 A78 78 0 0 1 200 80 Z"
+          fill="currentColor"
+          opacity="0.08"
+        />
+      </svg>
+
+      {/* Content — no card border, just confident typography + actions */}
+      <div className="pointer-events-auto relative flex max-w-md flex-col items-center gap-7 px-8 text-center">
+        <div className="space-y-3">
+          <div className="text-[1.35rem] font-semibold tracking-[-0.02em] text-foreground">
+            Your canvas is ready
+          </div>
+          <div className="mx-auto max-w-[22rem] text-[0.92rem] leading-[1.55] text-muted-foreground">
+            Let AI design from a floor plan, draw walls yourself, or open the
+            demo office to see a finished design.
+          </div>
         </div>
-        <div className="space-y-2">
-          <div className="text-lg font-medium tracking-[-0.01em]">
-            Start with a{" "}
-            <span className="font-serif-italic text-primary">
-              sample office
+        <div className="flex flex-col items-center gap-2.5">
+          {/* Primary CTA — the killer feature */}
+          <button
+            type="button"
+            onClick={onGenerateAI}
+            className="inline-flex h-11 items-center gap-2 rounded-full bg-primary px-6 text-[0.92rem] font-medium text-primary-foreground btn-lift shadow-[0_10px_28px_-10px_oklch(0.55_0.17_245/55%)] hover:bg-primary/90"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="size-4"
+              aria-hidden="true"
+            >
+              <path d="M12 2l2.39 5.69L20 8.59l-4 4.13.96 5.78L12 15.77 7.04 18.5 8 12.72l-4-4.13 5.61-.9L12 2z" />
+            </svg>
+            Generate with AI
+          </button>
+          {/* Secondary actions */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onUpload}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[0.8rem] font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="size-3.5"
+              >
+                <path d="M12 5v14M5 12l7-7 7 7" />
+              </svg>
+              Upload plan
+            </button>
+            <span className="text-muted-foreground/40" aria-hidden="true">
+              ·
             </span>
-            , or upload your own.
-          </div>
-          <div className="text-sm text-muted-foreground leading-relaxed max-w-sm">
-            Take the sample office for a spin, or drop in your own plan to
-            start from scratch.
+            <button
+              type="button"
+              onClick={onLoadDemo}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[0.8rem] font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+            >
+              Try the demo
+            </button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={onLoadDemo}
-            className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-primary px-4 text-[0.92rem] font-medium text-primary-foreground btn-lift shadow-[inset_0_1px_0_oklch(1_0_0/14%),0_6px_18px_-8px_oklch(0.78_0.135_158/55%)] hover:bg-primary/90"
-          >
-            Load demo office
-          </button>
-          <button
-            type="button"
-            onClick={onUpload}
-            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border bg-card/40 px-4 text-[0.92rem] font-medium text-foreground btn-lift hover:bg-card/70"
-          >
-            Upload my own plan
-          </button>
+        <div className="mt-1 text-[0.72rem] text-muted-foreground/70">
+          You can also drag a device from the library to start with.
         </div>
       </div>
     </div>

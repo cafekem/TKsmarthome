@@ -2,34 +2,48 @@
 
 import { Circle, Group, Line, Rect, Text, Wedge } from "react-konva";
 import type Konva from "konva";
-import type { Device } from "@/types/design";
+import type { Device, Wall } from "@/types/design";
 import type { KonvaEventObject } from "konva/lib/Node";
+import { snapToNearestWall } from "@/lib/geometry";
+
+/**
+ * Devices that physically mount on a wall — when dragged near one,
+ * the device snaps perpendicular to it. Ceiling-only devices (e.g.
+ * domes hanging in mid-room) get no snap.
+ */
+const WALL_MOUNTABLE: Record<Device["type"], boolean> = {
+  camera: true,
+  reader: true,
+  sensor: true,
+  network: false, // APs ceiling-mounted, switches/NVRs rack-mounted
+};
 
 interface DeviceShapeProps {
   device: Device;
   scalePxPerMeter: number;
   selected: boolean;
   showCoverage: boolean;
+  walls: Wall[];
   onSelect: () => void;
   onMove: (x: number, y: number) => void;
   onRotate: (radians: number) => void;
 }
 
 const COLORS = {
-  camera: "#34d399",
-  reader: "#38bdf8",
-  sensor: "#fbbf24",
-  network: "#a78bfa",
+  camera: "#3b82f6", // blue-500
+  reader: "#0ea5e9", // sky-500
+  sensor: "#f59e0b", // amber-500
+  network: "#a78bfa", // violet-400
 } as const;
 
 /** Distinct colors for each lens in a multi-sensor camera */
 const MULTI_SENSOR_COLORS = [
-  "#34d399", // green
-  "#38bdf8", // blue
+  "#3b82f6", // blue
+  "#06b6d4", // cyan
   "#f97316", // orange
   "#e879f9", // pink
   "#facc15", // yellow
-  "#2dd4bf", // teal
+  "#10b981", // emerald
 ] as const;
 
 export function DeviceShape({
@@ -37,6 +51,7 @@ export function DeviceShape({
   scalePxPerMeter,
   selected,
   showCoverage,
+  walls,
   onSelect,
   onMove,
   onRotate,
@@ -44,9 +59,30 @@ export function DeviceShape({
   const color = COLORS[device.type];
   const { x, y } = device.position;
   const rotation = device.rotation;
+  const canSnap = WALL_MOUNTABLE[device.type] && walls.length > 0;
+  // Snap threshold: ~0.7 m in design pixels. Walls within this distance
+  // capture the cursor; anywhere else the device drags freely.
+  const snapThresholdPx = Math.max(28, scalePxPerMeter * 0.7);
+  const snapOffsetPx = Math.max(8, scalePxPerMeter * 0.18);
 
   function handleDragEnd(e: KonvaEventObject<DragEvent>) {
-    onMove(e.target.x(), e.target.y());
+    const finalX = e.target.x();
+    const finalY = e.target.y();
+    if (canSnap) {
+      const snap = snapToNearestWall(
+        { x: finalX, y: finalY },
+        walls,
+        snapThresholdPx,
+        snapOffsetPx,
+      );
+      if (snap) {
+        // Position is already snapped via dragBoundFunc; just lock rotation.
+        onMove(snap.position.x, snap.position.y);
+        onRotate(snap.rotation);
+        return;
+      }
+    }
+    onMove(finalX, finalY);
   }
 
   return (
@@ -54,6 +90,19 @@ export function DeviceShape({
       x={x}
       y={y}
       draggable
+      dragBoundFunc={
+        canSnap
+          ? (pos) => {
+              const snap = snapToNearestWall(
+                pos,
+                walls,
+                snapThresholdPx,
+                snapOffsetPx,
+              );
+              return snap ? snap.position : pos;
+            }
+          : undefined
+      }
       onClick={(e) => {
         e.cancelBubble = true;
         onSelect();
@@ -84,7 +133,7 @@ export function DeviceShape({
                 angle={lens.fovDegrees}
                 rotation={(lensRotation * 180) / Math.PI - lens.fovDegrees / 2}
                 fill={MULTI_SENSOR_COLORS[i % MULTI_SENSOR_COLORS.length]}
-                opacity={selected ? 0.22 : 0.13}
+                opacity={selected ? 0.16 : 0.09}
                 listening={false}
               />
             );
@@ -97,7 +146,7 @@ export function DeviceShape({
           angle={device.fovDegrees}
           rotation={(rotation * 180) / Math.PI - device.fovDegrees / 2}
           fill={color}
-          opacity={selected ? 0.22 : 0.13}
+          opacity={selected ? 0.16 : 0.09}
           listening={false}
         />
       )}
@@ -108,9 +157,9 @@ export function DeviceShape({
           y={0}
           radius={device.rangeMeters * scalePxPerMeter}
           stroke={color}
-          strokeWidth={1.5}
-          dash={[6, 4]}
-          opacity={selected ? 0.55 : 0.32}
+          strokeWidth={1.2}
+          dash={[5, 4]}
+          opacity={selected ? 0.45 : 0.25}
           listening={false}
         />
       )}
@@ -133,59 +182,86 @@ export function DeviceShape({
           />
         )}
 
+      {/* Soft outer halo on selection */}
       {selected && (
         <Circle
           x={0}
           y={0}
-          radius={20}
+          radius={18}
+          fill={color}
+          opacity={0.12}
+          listening={false}
+        />
+      )}
+      {selected && (
+        <Circle
+          x={0}
+          y={0}
+          radius={16}
           stroke={color}
-          strokeWidth={2}
-          opacity={0.85}
+          strokeWidth={1.5}
+          opacity={0.7}
           listening={false}
         />
       )}
 
-      {/* Body */}
-      <Circle x={0} y={0} radius={12} fill="#0f0f10" stroke={color} strokeWidth={1.5} />
+      {/* Outer white ring — gives the marker a clean separation from any background */}
+      <Circle x={0} y={0} radius={10} fill="#ffffff" opacity={0.95} listening={false} />
+      {/* Body — colored circle */}
+      <Circle x={0} y={0} radius={8.5} fill={color} listening={false} />
 
-      {/* Direction indicator */}
+      {/* Direction indicator — refined notch */}
       <Line
-        points={[0, 0, Math.cos(rotation) * 16, Math.sin(rotation) * 16]}
+        points={[
+          Math.cos(rotation) * 8,
+          Math.sin(rotation) * 8,
+          Math.cos(rotation) * 14,
+          Math.sin(rotation) * 14,
+        ]}
         stroke={color}
-        strokeWidth={2}
+        strokeWidth={2.5}
         lineCap="round"
         listening={false}
       />
 
-      {/* Icon glyph - simple shape per type */}
-      <DeviceGlyph type={device.type} color={color} />
+      {/* Icon glyph - simple shape per type, now on colored body */}
+      <DeviceGlyph type={device.type} />
 
-      {/* Label */}
-      <Group y={20}>
-        <Rect
-          x={-Math.max(36, device.label.length * 4.5)}
-          y={0}
-          width={Math.max(72, device.label.length * 9)}
-          height={18}
-          offsetX={0}
-          cornerRadius={9}
-          fill="#1a1a1c"
-          stroke="#27272a"
-          strokeWidth={0.5}
-          opacity={0.95}
-          listening={false}
-        />
-        <Text
-          text={device.label}
-          fontSize={11}
-          fontFamily="Inter, system-ui, sans-serif"
-          fill="#e5e7eb"
-          align="center"
-          width={Math.max(72, device.label.length * 9)}
-          x={-Math.max(36, device.label.length * 4.5)}
-          y={3}
-          listening={false}
-        />
+      {/* Label — refined, smaller, more elegant */}
+      <Group y={16}>
+        {(() => {
+          const padding = 7;
+          const charWidth = 5.4;
+          const textWidth = device.label.length * charWidth;
+          const w = Math.max(40, textWidth + padding * 2);
+          return (
+            <>
+              <Rect
+                x={-w / 2}
+                y={0}
+                width={w}
+                height={15}
+                cornerRadius={4}
+                fill="#1c1d20"
+                opacity={0.92}
+                listening={false}
+              />
+              <Text
+                text={device.label}
+                fontSize={9.5}
+                fontStyle="500"
+                fontFamily="Inter, system-ui, sans-serif"
+                fill="#f4f4f5"
+                align="center"
+                width={w}
+                x={-w / 2}
+                y={3}
+                letterSpacing={-0.1}
+                listening={false}
+              />
+            </>
+          );
+        })()}
       </Group>
 
       {selected && (
@@ -199,38 +275,39 @@ export function DeviceShape({
   );
 }
 
-function DeviceGlyph({
-  type,
-  color,
-}: {
-  type: Device["type"];
-  color: string;
-}) {
+function DeviceGlyph({ type }: { type: Device["type"] }) {
+  const fg = "#ffffff";
   if (type === "camera") {
+    // Tiny lens dot at center
     return (
       <Group listening={false}>
-        <Rect x={-3} y={-3} width={6} height={6} cornerRadius={1} fill={color} />
+        <Circle x={0} y={0} radius={2.4} fill={fg} opacity={0.95} />
+        <Circle x={0} y={0} radius={1.1} fill="#1c1d20" />
       </Group>
     );
   }
   if (type === "reader") {
+    // Card-shape inside
     return (
       <Group listening={false}>
-        <Rect x={-3} y={-4} width={6} height={8} cornerRadius={1} fill={color} />
+        <Rect x={-2} y={-3} width={4} height={6} cornerRadius={0.8} fill={fg} opacity={0.95} />
       </Group>
     );
   }
   if (type === "sensor") {
+    // Concentric pulse rings
     return (
       <Group listening={false}>
-        <Circle x={0} y={0} radius={3} fill={color} />
+        <Circle x={0} y={0} radius={3.6} stroke={fg} strokeWidth={1} opacity={0.85} />
+        <Circle x={0} y={0} radius={1.5} fill={fg} />
       </Group>
     );
   }
+  // network — wifi dot
   return (
     <Group listening={false}>
-      <Circle x={0} y={0} radius={3} fill={color} />
-      <Circle x={0} y={0} radius={5} stroke={color} strokeWidth={1} />
+      <Circle x={0} y={0} radius={1.6} fill={fg} />
+      <Circle x={0} y={0} radius={3.6} stroke={fg} strokeWidth={1} opacity={0.7} />
     </Group>
   );
 }
