@@ -66,6 +66,18 @@ interface FloorSnapshot {
       unitCost: number;
       category: string;
     }[];
+    /** Live bill of materials — model, vendor, qty, unit price + subtotal */
+    bom: {
+      modelId: string;
+      displayName: string;
+      vendor: string;
+      quantity: number;
+      unitPrice: number;
+      subtotal: number;
+    }[];
+    hardwareSubtotal: number;
+    laborSubtotal: number;
+    grandTotal: number;
   };
 }
 
@@ -435,6 +447,22 @@ QUOTE (shape the project quote — bill of materials, rates, line items):
   update_quote_settings   change rates, client info, brand color, regional
                           notes, narrative, etc.
 
+QUOTE AUDIT PATTERN: when the user asks you to "audit", "verify", "review",
+"double-check" or "make sure my pricing is accurate," DON'T just glance at
+the BoM in your context — actually call web_search on the priced models
+you're unsure about, cite real sources, and adjust unit prices via
+update_quote_settings (for global rates) or annotations (kind="warning")
+when you spot a stale price you don't want to silently overwrite.
+
+MULTI-VENDOR INTEGRATION AUDIT: the BoM in your context lists each
+device's vendor (Verkada, Avigilon, Axis, Hanwha, Bosch, etc.). When
+asked to review the design, look for integration concerns — e.g. mixing
+ONVIF-friendly camera brands with a closed-ecosystem NVR, or pairing
+Verkada cameras with an on-prem Axis recorder when both would normally
+need their own management plane. Flag these as add_annotation kind=
+"warning" with a one-sentence rationale. Don't refuse — recommend a
+compatible alternative or a bridging product (web_search if needed).
+
 VIEW (UI navigation):
   view_from_camera        flip the 3D scene into first-person POV from a
                           specific camera. Use when the user asks "what
@@ -801,6 +829,19 @@ function formatFloorContext(body: ChatRequestBody): string {
     lines.push(
       `  Labor $${floor.quote.laborRate}/hr · markup ${floor.quote.markupPct}% · tax ${floor.quote.taxPct}%`,
     );
+    lines.push(
+      `  Totals: hardware $${floor.quote.hardwareSubtotal.toFixed(0)} · labor $${floor.quote.laborSubtotal.toFixed(0)} · grand $${floor.quote.grandTotal.toFixed(0)}`,
+    );
+    if (floor.quote.bom.length > 0) {
+      lines.push(`  Bill of materials (${floor.quote.bom.length} line(s)):`);
+      floor.quote.bom.forEach((row) => {
+        lines.push(
+          `    ${row.vendor} ${row.displayName} × ${row.quantity} @ $${row.unitPrice} = $${row.subtotal}`,
+        );
+      });
+    } else {
+      lines.push("  Bill of materials: (no priced devices yet)");
+    }
     if (floor.quote.extraLineItems.length > 0) {
       lines.push(`  Extra line items (${floor.quote.extraLineItems.length}):`);
       floor.quote.extraLineItems.forEach((li, i) => {

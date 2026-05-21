@@ -50,10 +50,14 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        {/* Light mode is the default and only theme — we removed the
+            toggle in the top bar. `forcedTheme` overrides any stale
+            localStorage value from before the toggle was retired. */}
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
-          enableSystem
+          defaultTheme="light"
+          forcedTheme="light"
+          enableSystem={false}
           disableTransitionOnChange={false}
           storageKey="deeper-vision-theme"
         >

@@ -3,11 +3,12 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import {
+  Banknote,
   ChevronDown,
   FileDown,
   FileSpreadsheet,
   FileText,
-  Receipt,
+  Settings,
   Sparkles,
   Upload,
 } from "lucide-react";
@@ -15,8 +16,6 @@ import { LogoMark } from "@/components/branding/Logo";
 import { useDesignStore, useCurrentDesign, useActiveFloor } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { ModeSwitcher } from "./ModeSwitcher";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { QuoteDrawer } from "@/components/quote/QuoteDrawer";
 import { toast } from "sonner";
 
 export function TopBar() {
@@ -25,8 +24,7 @@ export function TopBar() {
   const updateName = useDesignStore((s) => s.updateDesignName);
   const importDesign = useDesignStore((s) => s.importDesign);
   const quoteSettings = useDesignStore((s) => s.quoteSettings);
-  const [quoteOpen, setQuoteOpen] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
+  const setQuoteOpen = useDesignStore((s) => s.setQuoteOpen);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!design) return null;
@@ -84,129 +82,35 @@ export function TopBar() {
             DeeperVision
           </Link>
           <div className="h-4 w-px bg-border/70" />
-          <div className="group relative flex min-w-0 max-w-sm flex-1 items-center">
-            <input
-              value={design.name}
-              onChange={(e) => updateName(design.id, e.target.value)}
-              className="peer w-full min-w-0 rounded-md px-2 py-1 text-[0.92rem] tracking-[-0.005em] bg-transparent outline-none placeholder:text-muted-foreground/60 hover:bg-foreground/[0.04] focus:bg-foreground/[0.04] focus:ring-1 focus:ring-primary/40 transition-colors"
-              placeholder="Untitled design"
-              spellCheck={false}
-            />
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.7}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="pointer-events-none absolute right-2 size-3.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 peer-focus:opacity-0"
-              aria-hidden="true"
-            >
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-            </svg>
-          </div>
+          {/* Inline title editor — auto-sizes to its content so the
+              focus/hover background never extends past the actual text.
+              Capped at a comfortable max so very long titles wrap. */}
+          <TitleInput value={design.name} onChange={(v) => updateName(design.id, v)} />
         </div>
 
         <ModeSwitcher />
 
         <div className="flex flex-1 items-center justify-end gap-1">
-          <ThemeToggle size="sm" className="mr-0.5" />
-
-          {/* AI menu — Survey + Advisor */}
+          {/* AI chat tab toggle (no dropdown, no kbd hint). */}
           <AIMenu />
 
-
-          {/* File menu — Import / Save grouped into one menu */}
-          <FileMenu
+          {/* Single combined Project menu — replaces File + Export.
+              Holds save, import, and every export option (PDF, BoM CSV,
+              device schedule CSV, dvjson). */}
+          <ProjectMenu
+            design={design}
+            floor={floor}
+            quoteSettings={quoteSettings}
             onImport={() => fileInputRef.current?.click()}
-            onSave={exportJSON}
+            onSaveJson={exportJSON}
           />
-
-          {/* Export dropdown */}
-          <div className="relative">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="btn-lift"
-              onClick={() => setExportOpen((v) => !v)}
-            >
-              <FileText className="size-3.5" />
-              Export
-              <ChevronDown className="size-3 ml-0.5" />
-            </Button>
-            {exportOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setExportOpen(false)}
-                />
-                <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-border bg-popover p-1 shadow-lg">
-                  <ExportMenuItem
-                    icon={<FileText className="size-3.5 text-rose-500" />}
-                    label="Floor plan PDF"
-                    description="Install-ready drawing"
-                    onClick={async () => {
-                      setExportOpen(false);
-                      if (!design || !floor) return;
-                      toast.info("Generating PDF…");
-                      const { exportFloorPlanPDF } = await import("@/lib/export");
-                      await exportFloorPlanPDF(design, floor, {
-                        preparedBy: quoteSettings.preparedBy,
-                        preparedFor: quoteSettings.clientName,
-                        companyLogoDataUrl:
-                          quoteSettings.companyLogoDataUrl || undefined,
-                        brandColor: quoteSettings.brandColor || undefined,
-                        printFooter: quoteSettings.printFooter || undefined,
-                      });
-                      toast.success("PDF exported");
-                    }}
-                  />
-                  <ExportMenuItem
-                    icon={<FileSpreadsheet className="size-3.5 text-emerald-500" />}
-                    label="Bill of materials (CSV)"
-                    description="Quantities, pricing, labor"
-                    onClick={async () => {
-                      setExportOpen(false);
-                      if (!design || !floor) return;
-                      const { exportBOMCSV } = await import("@/lib/export");
-                      await exportBOMCSV(design, floor);
-                      toast.success("BOM exported");
-                    }}
-                  />
-                  <ExportMenuItem
-                    icon={<FileSpreadsheet className="size-3.5 text-sky-500" />}
-                    label="Device schedule (CSV)"
-                    description="Every device, one row each"
-                    onClick={async () => {
-                      setExportOpen(false);
-                      if (!design || !floor) return;
-                      const { exportDeviceScheduleCSV } = await import("@/lib/export");
-                      await exportDeviceScheduleCSV(design, floor);
-                      toast.success("Device schedule exported");
-                    }}
-                  />
-                  <div className="my-1 border-t border-border/60" />
-                  <ExportMenuItem
-                    icon={<FileDown className="size-3.5 text-muted-foreground" />}
-                    label="Project file (.dvjson)"
-                    description="Full design for re-import"
-                    onClick={() => {
-                      setExportOpen(false);
-                      exportJSON();
-                    }}
-                  />
-                </div>
-              </>
-            )}
-          </div>
 
           <Button
             size="sm"
             className="btn-lift ml-1 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[inset_0_1px_0_oklch(1_0_0/14%),0_4px_14px_-6px_oklch(0.78_0.135_158/50%)]"
             onClick={() => setQuoteOpen(true)}
           >
-            <Receipt className="size-3.5" />
+            <Banknote className="size-3.5" />
             Quote
           </Button>
           <input
@@ -222,7 +126,8 @@ export function TopBar() {
           />
         </div>
       </header>
-      <QuoteDrawer open={quoteOpen} onClose={() => setQuoteOpen(false)} />
+      {/* QuoteDrawer is mounted at the EditorShell level now so the AI chat
+          panel can open it too via the same store flag. */}
     </>
   );
 }
@@ -256,21 +161,56 @@ function AIMenu() {
     >
       <Sparkles className="size-3.5" strokeWidth={1.9} />
       <span className="hidden sm:inline">AI</span>
-      <kbd className="ml-0.5 hidden rounded border border-border/40 bg-background/40 px-1 py-px font-mono text-[10px] text-muted-foreground sm:inline">
-        ⌘K
-      </kbd>
     </button>
   );
 }
 
-function FileMenu({
+/**
+ * Combined project + export menu. Replaces the two separate dropdowns
+ * (File / Export) — all project operations + every export now live in
+ * one menu under a single "Project" entry.
+ */
+function ProjectMenu({
+  design,
+  floor,
+  quoteSettings,
   onImport,
-  onSave,
+  onSaveJson,
 }: {
+  design: ReturnType<typeof useCurrentDesign>;
+  floor: ReturnType<typeof useActiveFloor>;
+  quoteSettings: ReturnType<typeof useDesignStore.getState>["quoteSettings"];
   onImport: () => void;
-  onSave: () => void;
+  onSaveJson: () => void;
 }) {
   const [open, setOpen] = useState(false);
+
+  async function exportPDF() {
+    if (!design || !floor) return;
+    toast.info("Generating PDF…");
+    const { exportFloorPlanPDF } = await import("@/lib/export");
+    await exportFloorPlanPDF(design, floor, {
+      preparedBy: quoteSettings.preparedBy,
+      preparedFor: quoteSettings.clientName,
+      companyLogoDataUrl: quoteSettings.companyLogoDataUrl || undefined,
+      brandColor: quoteSettings.brandColor || undefined,
+      printFooter: quoteSettings.printFooter || undefined,
+    });
+    toast.success("PDF exported");
+  }
+  async function exportBom() {
+    if (!design || !floor) return;
+    const { exportBOMCSV } = await import("@/lib/export");
+    await exportBOMCSV(design, floor);
+    toast.success("BOM exported");
+  }
+  async function exportSchedule() {
+    if (!design || !floor) return;
+    const { exportDeviceScheduleCSV } = await import("@/lib/export");
+    await exportDeviceScheduleCSV(design, floor);
+    toast.success("Device schedule exported");
+  }
+
   return (
     <div className="relative">
       <Button
@@ -278,10 +218,10 @@ function FileMenu({
         variant="ghost"
         className="btn-lift"
         onClick={() => setOpen((v) => !v)}
-        aria-label="File menu"
+        aria-label="Project menu"
       >
-        <FileDown className="size-3.5" />
-        File
+        <Settings className="size-3.5" />
+        Project
         <ChevronDown className="size-3 ml-0.5" />
       </Button>
       {open && (
@@ -290,32 +230,55 @@ function FileMenu({
             className="fixed inset-0 z-40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-lg border border-border bg-popover p-1 shadow-lg">
-            <button
-              type="button"
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[0.82rem] transition-colors hover:bg-muted/60"
-              onClick={() => {
-                setOpen(false);
-                onSave();
-              }}
-            >
-              <FileDown className="size-3.5 text-muted-foreground" />
-              Save project
-              <kbd className="ml-auto rounded border border-border/40 bg-background/40 px-1 py-px font-mono text-[10px] text-muted-foreground">
-                ⌘S
-              </kbd>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[0.82rem] transition-colors hover:bg-muted/60"
-              onClick={() => {
-                setOpen(false);
-                onImport();
-              }}
-            >
-              <Upload className="size-3.5 text-muted-foreground" />
-              Import project
-            </button>
+          <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-popover p-1 shadow-lg">
+            <MenuSection label="Project file">
+              <MenuItem
+                icon={<FileDown className="size-3.5 text-muted-foreground" />}
+                label="Save project (.dvjson)"
+                onClick={() => {
+                  setOpen(false);
+                  onSaveJson();
+                }}
+              />
+              <MenuItem
+                icon={<Upload className="size-3.5 text-muted-foreground" />}
+                label="Import project"
+                onClick={() => {
+                  setOpen(false);
+                  onImport();
+                }}
+              />
+            </MenuSection>
+            <div className="my-1 border-t border-border/50" />
+            <MenuSection label="Export">
+              <MenuItem
+                icon={<FileText className="size-3.5 text-rose-500" />}
+                label="Floor plan PDF"
+                description="Install-ready drawing"
+                onClick={() => {
+                  setOpen(false);
+                  exportPDF();
+                }}
+              />
+              <MenuItem
+                icon={<FileSpreadsheet className="size-3.5 text-emerald-500" />}
+                label="Bill of materials (CSV)"
+                description="Quantities, pricing, labor"
+                onClick={() => {
+                  setOpen(false);
+                  exportBom();
+                }}
+              />
+              <MenuItem
+                icon={<FileSpreadsheet className="size-3.5 text-sky-500" />}
+                label="Device schedule (CSV)"
+                description="Every device, one row each"
+                onClick={() => {
+                  setOpen(false);
+                  exportSchedule();
+                }}
+              />
+            </MenuSection>
           </div>
         </>
       )}
@@ -323,7 +286,24 @@ function FileMenu({
   );
 }
 
-function ExportMenuItem({
+function MenuSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function MenuItem({
   icon,
   label,
   description,
@@ -331,20 +311,60 @@ function ExportMenuItem({
 }: {
   icon: React.ReactNode;
   label: string;
-  description: string;
+  description?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted/60"
       onClick={onClick}
+      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-muted/60"
     >
       {icon}
       <div className="min-w-0 flex-1">
-        <div className="text-[0.8rem] font-medium">{label}</div>
-        <div className="text-[0.65rem] text-muted-foreground">{description}</div>
+        <div className="text-[0.8rem] font-medium leading-tight">{label}</div>
+        {description && (
+          <div className="text-[0.66rem] text-muted-foreground leading-snug">
+            {description}
+          </div>
+        )}
       </div>
     </button>
   );
 }
+
+/**
+ * Inline title editor. The input visually sizes to its actual text so the
+ * hover/focus background never sprawls past the title itself.
+ *
+ * Uses a hidden span to measure, then sets the input's width to match
+ * (capped at a comfortable max so very long titles wrap into the next
+ * row of chrome rather than pushing the mode switcher).
+ */
+function TitleInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="group relative inline-flex min-w-0 items-center">
+      <span
+        aria-hidden
+        className="invisible whitespace-pre px-2 py-1 text-[0.92rem] tracking-[-0.005em]"
+      >
+        {value || "Untitled design"}
+      </span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="peer absolute inset-0 min-w-[8ch] max-w-[26rem] rounded-md px-2 py-1 text-[0.92rem] tracking-[-0.005em] bg-transparent outline-none placeholder:text-muted-foreground/60 hover:bg-foreground/[0.04] focus:bg-foreground/[0.04] focus:ring-1 focus:ring-primary/40 transition-colors"
+        placeholder="Untitled design"
+        spellCheck={false}
+        size={Math.max(8, value.length || 16)}
+      />
+    </div>
+  );
+}
+

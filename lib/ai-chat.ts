@@ -1,6 +1,7 @@
 import type { Device, Floor } from "@/types/design";
 import { useDesignStore } from "@/lib/store";
-import type { ExtraLineItem } from "@/lib/pricing";
+import { computeQuote, type ExtraLineItem } from "@/lib/pricing";
+import { planCabling } from "@/lib/cabling";
 
 /** One message in the chat panel. */
 export interface ChatMessage {
@@ -189,10 +190,21 @@ export async function streamAIChat(args: {
   handlers: ChatStreamHandlers;
   signal?: AbortSignal;
 }): Promise<void> {
-  // Include the current quote shape so Claude can reason about line items,
-  // labor rates, client name, etc. without a separate query.
+  // Include the current quote shape — rates, client info, line items, AND
+  // the live bill of materials with vendor + unit price — so Claude can
+  // audit pricing, verify integration concerns across vendors, and edit
+  // line items confidently without an extra query.
   const store = useDesignStore.getState();
   const q = store.quoteSettings;
+  const cabling = planCabling(args.floor);
+  const breakdown = computeQuote(args.floor, {
+    ...q,
+    autoCabling: {
+      totalLengthM: cabling.totalLengthM,
+      cameraRuns: cabling.cameraRuns,
+      readerRuns: cabling.readerRuns,
+    },
+  });
   const floorWithQuote = {
     ...summarizeFloorForChat(args.floor),
     quote: {
@@ -207,6 +219,17 @@ export async function streamAIChat(args: {
         unitCost: li.unitCost,
         category: li.category,
       })),
+      bom: breakdown.rows.map((r) => ({
+        modelId: r.modelId,
+        displayName: r.displayName,
+        vendor: r.vendor,
+        quantity: r.quantity,
+        unitPrice: r.unitPrice,
+        subtotal: r.subtotal,
+      })),
+      hardwareSubtotal: breakdown.hardwareSubtotal,
+      laborSubtotal: breakdown.laborSubtotal,
+      grandTotal: breakdown.grandTotal,
     },
   };
   const res = await fetch("/api/ai/chat", {

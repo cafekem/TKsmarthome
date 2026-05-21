@@ -11,6 +11,7 @@ import { Scene3D } from "@/components/scene3d/Scene3D";
 import { SimView } from "@/components/simulation/SimView";
 import { AISurveyDialog } from "@/components/ai/AISurveyDialog";
 import { AIAdvisorPanel } from "@/components/ai/AIAdvisorPanel";
+import { QuoteDrawer } from "@/components/quote/QuoteDrawer";
 
 function useHasHydrated() {
   const [hydrated, setHydrated] = useState(false);
@@ -67,6 +68,8 @@ export function EditorShell({ designId }: { designId: string }) {
   const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
   const aiAdvisorOpen = useDesignStore((s) => s.aiAdvisorOpen);
   const setAIAdvisorOpen = useDesignStore((s) => s.setAIAdvisorOpen);
+  const quoteOpen = useDesignStore((s) => s.quoteOpen);
+  const setQuoteOpen = useDesignStore((s) => s.setQuoteOpen);
   const rightTab = useDesignStore((s) => s.rightTab);
   const setRightTab = useDesignStore((s) => s.setRightTab);
   const hydrated = useHasHydrated();
@@ -147,6 +150,7 @@ export function EditorShell({ designId }: { designId: string }) {
         open={aiAdvisorOpen}
         onClose={() => setAIAdvisorOpen(false)}
       />
+      <QuoteDrawer open={quoteOpen} onClose={() => setQuoteOpen(false)} />
     </div>
   );
 }

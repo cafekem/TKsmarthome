@@ -45,6 +45,7 @@ import {
   type ChatOperation,
   type Citation,
 } from "@/lib/ai-chat";
+import { InlineQuoteCard } from "./InlineQuoteCard";
 import { cn } from "@/lib/utils";
 
 /**
@@ -64,6 +65,7 @@ export function AIChatPanel() {
   const clearAICursor = useDesignStore((s) => s.clearAICursor);
   const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
   const setAIAdvisorOpen = useDesignStore((s) => s.setAIAdvisorOpen);
+  const setQuoteOpen = useDesignStore((s) => s.setQuoteOpen);
 
   // Hydrate from localStorage on first mount so the conversation survives
   // a page reload. Keyed by design id — switching designs gives a fresh chat.
@@ -388,6 +390,11 @@ export function AIChatPanel() {
           )}
         </div>
       </div>
+
+      {/* Live quote summary card — pricing, totals, and a "Print quote"
+          button live INSIDE the chat so the user can discuss costs with
+          the agent without switching tabs. */}
+      <InlineQuoteCard onOpenFullQuote={() => setQuoteOpen(true)} />
 
       {/* Conversation */}
       <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5">

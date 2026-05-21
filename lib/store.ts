@@ -92,6 +92,7 @@ interface DesignState {
   quoteSettings: QuoteSettings;
   aiSurveyOpen: boolean;
   aiAdvisorOpen: boolean;
+  quoteOpen: boolean;
   visibility: VisibilityFilter;
   /** When the user drops the "Pegman" character on the 3D scene, we
       store the world-space drop point here. The 3D scene reads it as
@@ -142,6 +143,7 @@ interface DesignState {
   setViewTransform(t: ViewTransform): void;
   setAISurveyOpen(open: boolean): void;
   setAIAdvisorOpen(open: boolean): void;
+  setQuoteOpen(open: boolean): void;
   setWalkSpawnOverride(spawn: [number, number, number] | null): void;
   /**
    * Enter (or exit) camera-POV mode. Passing a device id sets the target
@@ -234,6 +236,7 @@ export const useDesignStore = create<DesignState>()(
         quoteSettings: DEFAULT_QUOTE_SETTINGS,
         aiSurveyOpen: false,
         aiAdvisorOpen: false,
+        quoteOpen: false,
         visibility: DEFAULT_VISIBILITY,
         walkSpawnOverride: null,
         cameraPovTargetId: null,
@@ -311,6 +314,10 @@ export const useDesignStore = create<DesignState>()(
 
         setAIAdvisorOpen(open) {
           set({ aiAdvisorOpen: open });
+        },
+
+        setQuoteOpen(open) {
+          set({ quoteOpen: open });
         },
 
         setWalkSpawnOverride(spawn) {

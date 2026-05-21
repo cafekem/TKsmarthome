@@ -1,7 +1,15 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Loader2, Printer, Sparkles, X } from "lucide-react";
+import {
+  Banknote,
+  Loader2,
+  Palette,
+  Printer,
+  SlidersHorizontal,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   useActiveFloor,
@@ -50,6 +58,9 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
   const [locationDraft, setLocationDraft] = useState(
     quoteSettings.projectLocation,
   );
+
+  // Tabbed sections within the redesigned drawer.
+  const [tab, setTab] = useState<"overview" | "rates" | "branding">("overview");
 
   async function runAIEstimate() {
     if (!floor || !design) return;
@@ -128,12 +139,14 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
           "print:static print:inset-auto print:max-w-none print:w-full print:overflow-visible print:shadow-none print:bg-white print:text-black"
         )}
       >
-        <div className="flex items-center justify-between border-b border-border px-6 py-4 print:hidden">
-          <div>
-            <div className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {/* Drawer header — title + print + close. Clean strip, no shadows. */}
+        <div className="flex items-center justify-between border-b border-border/70 px-6 py-3 print:hidden">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[0.7rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              <Banknote className="size-3.5 text-primary" strokeWidth={1.8} />
               Quote
             </div>
-            <div className="mt-0.5 text-lg font-medium tracking-[-0.01em]">
+            <div className="mt-0.5 truncate text-[1.05rem] font-semibold tracking-[-0.01em]">
               {design?.name ?? "Untitled design"}
             </div>
           </div>
@@ -141,20 +154,36 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 btn-lift shadow-[0_4px_14px_-6px_oklch(0.78_0.135_158/55%)]"
+              className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-[0.82rem] font-medium text-background hover:bg-foreground/85"
             >
               <Printer className="size-3.5" />
-              Print to PDF
+              Print
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="flex size-9 items-center justify-center rounded-md border border-border bg-card/40 text-muted-foreground hover:text-foreground hover:bg-card/70"
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06]"
               aria-label="Close"
             >
               <X className="size-4" />
             </button>
           </div>
+        </div>
+
+        {/* Tab strip — Overview / Rates / Branding. Print hides this. */}
+        <div className="flex items-center gap-1 border-b border-border/70 bg-background/30 px-4 py-1.5 print:hidden">
+          <QuoteTab active={tab === "overview"} onClick={() => setTab("overview")}>
+            <Banknote className="size-3.5" strokeWidth={1.8} />
+            Overview
+          </QuoteTab>
+          <QuoteTab active={tab === "rates"} onClick={() => setTab("rates")}>
+            <SlidersHorizontal className="size-3.5" strokeWidth={1.8} />
+            Rates
+          </QuoteTab>
+          <QuoteTab active={tab === "branding"} onClick={() => setTab("branding")}>
+            <Palette className="size-3.5" strokeWidth={1.8} />
+            Branding
+          </QuoteTab>
         </div>
 
         <div
@@ -220,33 +249,54 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
             )}
           </div>
 
-          {/* Client + prepared-by inputs (screen only) */}
-          <div className="grid grid-cols-2 gap-3 print:hidden">
-            <Field
-              label="Client"
-              value={quoteSettings.clientName}
-              placeholder="ACME Corp — Boston HQ"
-              onChange={(v) => updateQuoteSettings({ clientName: v })}
-            />
-            <Field
-              label="Prepared by"
-              value={quoteSettings.preparedBy}
-              placeholder="Your Company, Inc."
-              onChange={(v) => updateQuoteSettings({ preparedBy: v })}
-            />
-          </div>
+          {tab === "overview" && (
+            <div className="print:hidden space-y-5">
+              {/* Hero total — biggest number on the screen. */}
+              {breakdown && (
+                <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-primary/[0.06] to-transparent p-5">
+                  <div className="text-[0.7rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Grand total
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-3">
+                    <div className="text-[2.2rem] font-semibold tracking-[-0.02em]">
+                      {formatUSD(breakdown.grandTotal)}
+                    </div>
+                    <div className="text-[0.78rem] text-muted-foreground">
+                      incl. tax
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2.5">
+                    <HeroStat label="Hardware" value={formatUSD(breakdown.hardwareSubtotal)} />
+                    <HeroStat
+                      label="Labor + cabling"
+                      value={formatUSD(
+                        breakdown.laborSubtotal +
+                          breakdown.cablingSubtotal +
+                          breakdown.commissioningFee,
+                      )}
+                    />
+                    <HeroStat label="Tax" value={formatUSD(breakdown.taxAmount)} />
+                  </div>
+                </div>
+              )}
 
-          {/* Branding — logo upload + brand color (screen only). White-labels
-              the printed PDF. */}
-          <BrandingSection
-            companyLogoDataUrl={quoteSettings.companyLogoDataUrl}
-            brandColor={quoteSettings.brandColor}
-            printFooter={quoteSettings.printFooter}
-            onChange={updateQuoteSettings}
-          />
-
-          {/* AI Quote Assistant — screen only */}
-          <section className="print:hidden">
+              {/* Client + prepared-by */}
+              <div className="grid grid-cols-2 gap-3">
+                <Field
+                  label="Client"
+                  value={quoteSettings.clientName}
+                  placeholder="ACME Corp — Boston HQ"
+                  onChange={(v) => updateQuoteSettings({ clientName: v })}
+                />
+                <Field
+                  label="Prepared by"
+                  value={quoteSettings.preparedBy}
+                  placeholder="Your Company, Inc."
+                  onChange={(v) => updateQuoteSettings({ preparedBy: v })}
+                />
+              </div>
+              {/* AI assistant card opens directly below */}
+              <section>
             <div
               className={cn(
                 "rounded-xl border bg-card/40 p-4 transition-colors",
@@ -450,49 +500,6 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
               </section>
             )}
 
-          {/* Editable rates (screen only) */}
-          <section className="print:hidden">
-            <SectionHeading>Rates</SectionHeading>
-            <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-              <NumberField
-                label="Labor rate ($/hr)"
-                value={quoteSettings.laborRate}
-                step={5}
-                onChange={(v) => updateQuoteSettings({ laborRate: v })}
-              />
-              <NumberField
-                label="Cabling / camera ($)"
-                value={quoteSettings.cablingPerCamera}
-                step={10}
-                onChange={(v) => updateQuoteSettings({ cablingPerCamera: v })}
-              />
-              <NumberField
-                label="Cabling / reader ($)"
-                value={quoteSettings.cablingPerReader}
-                step={10}
-                onChange={(v) => updateQuoteSettings({ cablingPerReader: v })}
-              />
-              <NumberField
-                label="Commissioning fee ($)"
-                value={quoteSettings.commissioningFee}
-                step={50}
-                onChange={(v) => updateQuoteSettings({ commissioningFee: v })}
-              />
-              <NumberField
-                label="Markup (%)"
-                value={quoteSettings.markupPct}
-                step={1}
-                onChange={(v) => updateQuoteSettings({ markupPct: v })}
-              />
-              <NumberField
-                label="Sales tax (%)"
-                value={quoteSettings.taxPct}
-                step={0.25}
-                onChange={(v) => updateQuoteSettings({ taxPct: v })}
-              />
-            </div>
-          </section>
-
           {/* Totals */}
           {breakdown && (
             <section>
@@ -521,6 +528,64 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
               </div>
             </section>
           )}
+            </div>
+          )}
+
+          {tab === "rates" && (
+            <div className="print:hidden space-y-4">
+              <div className="text-[0.78rem] text-muted-foreground leading-relaxed">
+                Editable rates that feed every total. The AI quote assistant
+                (back on Overview) can adjust these for your region.
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                <NumberField
+                  label="Labor rate ($/hr)"
+                  value={quoteSettings.laborRate}
+                  step={5}
+                  onChange={(v) => updateQuoteSettings({ laborRate: v })}
+                />
+                <NumberField
+                  label="Cabling / camera ($)"
+                  value={quoteSettings.cablingPerCamera}
+                  step={10}
+                  onChange={(v) => updateQuoteSettings({ cablingPerCamera: v })}
+                />
+                <NumberField
+                  label="Cabling / reader ($)"
+                  value={quoteSettings.cablingPerReader}
+                  step={10}
+                  onChange={(v) => updateQuoteSettings({ cablingPerReader: v })}
+                />
+                <NumberField
+                  label="Commissioning fee ($)"
+                  value={quoteSettings.commissioningFee}
+                  step={50}
+                  onChange={(v) => updateQuoteSettings({ commissioningFee: v })}
+                />
+                <NumberField
+                  label="Markup (%)"
+                  value={quoteSettings.markupPct}
+                  step={1}
+                  onChange={(v) => updateQuoteSettings({ markupPct: v })}
+                />
+                <NumberField
+                  label="Sales tax (%)"
+                  value={quoteSettings.taxPct}
+                  step={0.25}
+                  onChange={(v) => updateQuoteSettings({ taxPct: v })}
+                />
+              </div>
+            </div>
+          )}
+
+          {tab === "branding" && (
+            <BrandingSection
+              companyLogoDataUrl={quoteSettings.companyLogoDataUrl}
+              brandColor={quoteSettings.brandColor}
+              printFooter={quoteSettings.printFooter}
+              onChange={updateQuoteSettings}
+            />
+          )}
 
           {/* Footer (print) — branded if a custom footer line was set */}
           <div
@@ -543,6 +608,46 @@ export function QuoteDrawer({ open, onClose }: QuoteDrawerProps) {
         </div>
       </aside>
     </>
+  );
+}
+
+/** Tab in the redesigned drawer header. */
+function QuoteTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[0.78rem] font-medium tracking-[-0.005em] transition-colors",
+        active
+          ? "bg-foreground/[0.07] text-foreground"
+          : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Small breakdown stat inside the Grand Total hero card. */
+function HeroStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border/60 bg-background/40 px-3 py-2">
+      <div className="text-[0.62rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-0.5 font-mono text-[0.92rem] font-medium tracking-tight">
+        {value}
+      </div>
+    </div>
   );
 }
 
