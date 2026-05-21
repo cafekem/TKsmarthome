@@ -90,6 +90,7 @@ interface DesignState {
   quoteSettings: QuoteSettings;
   aiSurveyOpen: boolean;
   aiAdvisorOpen: boolean;
+  aiChatOpen: boolean;
   visibility: VisibilityFilter;
   /** When the user drops the "Pegman" character on the 3D scene, we
       store the world-space drop point here. The 3D scene reads it as
@@ -110,6 +111,7 @@ interface DesignState {
   setViewTransform(t: ViewTransform): void;
   setAISurveyOpen(open: boolean): void;
   setAIAdvisorOpen(open: boolean): void;
+  setAIChatOpen(open: boolean): void;
   setWalkSpawnOverride(spawn: [number, number, number] | null): void;
   toggleDeviceTypeVisible(type: DeviceType): void;
   toggleInstallStatusVisible(status: InstallStatus): void;
@@ -165,6 +167,7 @@ export const useDesignStore = create<DesignState>()(
         quoteSettings: DEFAULT_QUOTE_SETTINGS,
         aiSurveyOpen: false,
         aiAdvisorOpen: false,
+        aiChatOpen: false,
         visibility: DEFAULT_VISIBILITY,
         walkSpawnOverride: null,
 
@@ -239,6 +242,10 @@ export const useDesignStore = create<DesignState>()(
 
         setAIAdvisorOpen(open) {
           set({ aiAdvisorOpen: open });
+        },
+
+        setAIChatOpen(open) {
+          set({ aiChatOpen: open });
         },
 
         setWalkSpawnOverride(spawn) {

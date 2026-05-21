@@ -11,6 +11,7 @@ import { Scene3D } from "@/components/scene3d/Scene3D";
 import { SimView } from "@/components/simulation/SimView";
 import { AISurveyDialog } from "@/components/ai/AISurveyDialog";
 import { AIAdvisorPanel } from "@/components/ai/AIAdvisorPanel";
+import { AIChatPanel } from "@/components/ai/AIChatPanel";
 
 function useHasHydrated() {
   const [hydrated, setHydrated] = useState(false);
@@ -29,6 +30,8 @@ export function EditorShell({ designId }: { designId: string }) {
   const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
   const aiAdvisorOpen = useDesignStore((s) => s.aiAdvisorOpen);
   const setAIAdvisorOpen = useDesignStore((s) => s.setAIAdvisorOpen);
+  const aiChatOpen = useDesignStore((s) => s.aiChatOpen);
+  const setAIChatOpen = useDesignStore((s) => s.setAIChatOpen);
   const hydrated = useHasHydrated();
 
   useEffect(() => {
@@ -41,6 +44,19 @@ export function EditorShell({ designId }: { designId: string }) {
     // in a mode that requires content they haven't created yet.
     setViewMode("2d");
   }, [designId, ensureDesign, setCurrent, setViewMode, hydrated]);
+
+  // ⌘K / Ctrl-K opens (or closes) the AI chat panel. We listen at the window
+  // so any focused element can be interrupted by the shortcut.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setAIChatOpen(!aiChatOpen);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [aiChatOpen, setAIChatOpen]);
 
   if (!hydrated) {
     return <div className="flex h-screen items-center justify-center" />;
@@ -71,6 +87,7 @@ export function EditorShell({ designId }: { designId: string }) {
         open={aiAdvisorOpen}
         onClose={() => setAIAdvisorOpen(false)}
       />
+      <AIChatPanel open={aiChatOpen} onClose={() => setAIChatOpen(false)} />
     </div>
   );
 }

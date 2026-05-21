@@ -236,6 +236,7 @@ function AIMenu() {
   const [open, setOpen] = useState(false);
   const setAISurveyOpen = useDesignStore((s) => s.setAISurveyOpen);
   const setAIAdvisorOpen = useDesignStore((s) => s.setAIAdvisorOpen);
+  const setAIChatOpen = useDesignStore((s) => s.setAIChatOpen);
   return (
     <div className="relative">
       <button
@@ -254,7 +255,17 @@ function AIMenu() {
             className="fixed inset-0 z-40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-popover p-1 shadow-lg">
+          <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-lg border border-border bg-popover p-1 shadow-lg">
+            <AIMenuItem
+              title="Chat with AI editor"
+              description="Talk to Claude — it adds, moves, tweaks devices for you."
+              shortcut="⌘K"
+              onClick={() => {
+                setOpen(false);
+                setAIChatOpen(true);
+              }}
+            />
+            <div className="my-1 border-t border-border/50" />
             <AIMenuItem
               title="Generate design from plan"
               description="Upload a floor plan, get walls + devices."
@@ -281,10 +292,12 @@ function AIMenu() {
 function AIMenuItem({
   title,
   description,
+  shortcut,
   onClick,
 }: {
   title: string;
   description: string;
+  shortcut?: string;
   onClick: () => void;
 }) {
   return (
@@ -298,8 +311,15 @@ function AIMenuItem({
         strokeWidth={1.8}
       />
       <div className="min-w-0 flex-1">
-        <div className="text-[0.82rem] font-medium tracking-[-0.005em]">
-          {title}
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[0.82rem] font-medium tracking-[-0.005em]">
+            {title}
+          </div>
+          {shortcut && (
+            <kbd className="rounded border border-border/40 bg-background/40 px-1 py-px font-mono text-[10px] text-muted-foreground">
+              {shortcut}
+            </kbd>
+          )}
         </div>
         <div className="text-[0.7rem] text-muted-foreground leading-snug">
           {description}
