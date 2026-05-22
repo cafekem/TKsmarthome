@@ -302,18 +302,18 @@ const DOMAIN_TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "add_door",
     description:
-      "Add a door on a specific wall at a given (x, y) point in floor-plan pixels. The door is associated with a wallId from the current floor state. rotationDegrees should align with the wall direction.",
+      "Add a door on a specific wall. The (x, y) you provide is automatically snapped onto the wall's line segment and the rotation is overwritten with the wall's actual tangent angle — so your coords only need to be roughly on the wall. The simplest pattern: use the wall's midpoint coordinates (provided as `mid (mx, my)` in the floor state) when you want a door centered on the wall, or interpolate ~30/70% along the wall for off-center placement. Width defaults: 0.9 m (standard), 1.2 m (wide single), 1.8 m (double).",
     input_schema: {
       type: "object",
       properties: {
-        wallId: { type: "string" },
-        x: { type: "number" },
-        y: { type: "number" },
-        rotationDegrees: { type: "number" },
-        widthMeters: {
+        wallId: { type: "string", description: "Required — must match a wall id from the floor state." },
+        x: { type: "number", description: "Floor-plan pixel X. Snapped onto the wall." },
+        y: { type: "number", description: "Floor-plan pixel Y. Snapped onto the wall." },
+        rotationDegrees: {
           type: "number",
-          description: "Door width in meters. Defaults: 0.9 (standard), 1.2 (wide), 1.8 (double).",
+          description: "Hint only — actual rotation is forced to the wall's tangent. Pass 0 if unsure.",
         },
+        widthMeters: { type: "number" },
         locked: { type: "boolean" },
         label: { type: "string" },
       },
@@ -868,8 +868,16 @@ function formatFloorContext(body: ChatRequestBody): string {
   if (floor.walls.length === 0) lines.push("  (none yet)");
   else {
     for (const w of floor.walls.slice(0, 60)) {
+      const dx = w.endX - w.startX;
+      const dy = w.endY - w.startY;
+      const lenPx = Math.hypot(dx, dy);
+      const midX = (w.startX + w.endX) / 2;
+      const midY = (w.startY + w.endY) / 2;
+      const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+      // Include midpoint, length, and angle so the agent can place
+      // doors / annotations on a wall without guessing coordinates.
       lines.push(
-        `  [${w.id}] (${w.startX.toFixed(0)},${w.startY.toFixed(0)}) → (${w.endX.toFixed(0)},${w.endY.toFixed(0)})`,
+        `  [${w.id}] (${w.startX.toFixed(0)},${w.startY.toFixed(0)}) → (${w.endX.toFixed(0)},${w.endY.toFixed(0)}) · mid (${midX.toFixed(0)},${midY.toFixed(0)}) · ${lenPx.toFixed(0)}px @ ${angleDeg.toFixed(0)}°`,
       );
     }
     if (floor.walls.length > 60)

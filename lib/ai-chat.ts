@@ -466,9 +466,47 @@ export function applyChatOperation(floorId: string, op: ChatOperation): boolean 
       return true;
     }
     if (op.kind === "add-door") {
+      // Claude often gives an approximate (x,y) plus a wallId. The
+      // coordinates frequently don't lie exactly on that wall, which
+      // makes the door appear floating in the middle of a room in 3D.
+      // Fix it here: project the proposed point onto the wall's line
+      // segment, clamp to the segment, and use the wall's tangent
+      // direction for the door's rotation. That way Claude's specs
+      // only need to be roughly right — the geometry always lands on
+      // the wall.
+      const wall = floor.walls.find((w) => w.id === op.wallId);
+      let snappedX = op.x;
+      let snappedY = op.y;
+      let snappedRot = (op.rotationDegrees * Math.PI) / 180;
+      if (wall) {
+        const dx = wall.end.x - wall.start.x;
+        const dy = wall.end.y - wall.start.y;
+        const len2 = dx * dx + dy * dy;
+        if (len2 > 0) {
+          // Parametric position t in [0,1] along the segment.
+          const t = Math.max(
+            0,
+            Math.min(
+              1,
+              ((op.x - wall.start.x) * dx + (op.y - wall.start.y) * dy) /
+                len2,
+            ),
+          );
+          // Pull doors at least half-a-door-width from each endpoint so
+          // they don't visually overlap the wall corner in 3D.
+          const len = Math.sqrt(len2);
+          const halfDoorPx = (op.widthMeters / 2) * floor.scale;
+          const minT = Math.min(0.5, halfDoorPx / len);
+          const maxT = 1 - minT;
+          const tClamped = Math.max(minT, Math.min(maxT, t));
+          snappedX = wall.start.x + dx * tClamped;
+          snappedY = wall.start.y + dy * tClamped;
+          snappedRot = Math.atan2(dy, dx);
+        }
+      }
       store.addDoor(floorId, {
-        position: { x: op.x, y: op.y },
-        rotation: (op.rotationDegrees * Math.PI) / 180,
+        position: { x: snappedX, y: snappedY },
+        rotation: snappedRot,
         widthMeters: op.widthMeters,
         wallId: op.wallId,
         locked: op.locked,
