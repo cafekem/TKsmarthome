@@ -1,0 +1,508 @@
+DEEPERVISION — BUILD LOG & PROJECT SUMMARY
+==========================================
+
+Live production URL: https://deeper-vision-self.vercel.app
+GitHub repo:         https://github.com/mohosy/DeeperVision
+Branch deployed:     main (auto-mirrored from claude/elastic-snyder-e5729c)
+Hosted on:           Vercel
+
+============================================================
+WHAT THIS PROJECT IS
+============================================================
+
+DeeperVision is a CAD-style web app for designing commercial physical-
+security systems (cameras, card readers, sensors, NVRs, switches,
+access points, doors, walls). Think Figma + Google Earth Pegman +
+Cursor's AI panel, but for security installers.
+
+The goal: a single tool where a security integrator can sketch a floor
+plan in 2D, see it extrude into 3D, walk through it in first-person,
+drop devices from a real product catalog, route cabling automatically,
+generate a quote with location-aware pricing, and edit any of it by
+talking to an embedded AI agent that has full live access to the
+canvas + quote.
+
+It's a competitor / spiritual successor to System Surveyor, but more
+opinionated about AI being a first-class collaborator inside the
+editor — not a separate "AI feature."
+
+============================================================
+HOW IT WAS DEPLOYED (so this can be reproduced)
+============================================================
+
+Stack
+  • Next.js 16.2.6 with Turbopack
+  • React 19, TypeScript 5
+  • Tailwind CSS
+  • React-Konva for 2D canvas
+  • React-Three-Fiber + drei for 3D
+  • Zustand store with persist + zundo (undo/redo)
+  • Anthropic SDK (@anthropic-ai/sdk ^0.97.1) — model claude-sonnet-4-5
+  • Lucide icons, Sonner toasts
+
+Hosting / CI
+  • Production: https://deeper-vision-self.vercel.app (Vercel)
+  • Each push to GitHub main auto-triggers `vercel --prod` via
+    `npx vercel --prod` in the worktree. The build URL is then
+    aliased to deeper-vision-self.vercel.app with:
+        npx vercel alias set <new-deployment-url> \
+            deeper-vision-self.vercel.app
+  • Build verified locally with `npm run build` before every push.
+    Routes:
+        /api/ai/advisor   POST  (coverage audit)
+        /api/ai/chat      POST  (Cursor-style chat, SSE streaming)
+        /api/ai/quote     POST  (location-aware quote)
+        /api/ai/survey    POST  (image → wall trace)
+        /design/[id]      GET   (the editor)
+        /design/new       GET   (new-design redirect)
+        /                 GET   (landing)
+
+Env
+  ANTHROPIC_API_KEY  required server-side for all 4 /api/ai/* routes.
+
+Git workflow
+  • All edits committed locally on this worktree.
+  • `git push origin claude/elastic-snyder-e5729c:main` pushes to the
+    canonical main branch on GitHub.
+  • Worktree status verified clean before any deploy.
+
+============================================================
+EVERYTHING WE BUILT (in roughly the order we built it)
+============================================================
+
+CATALOG + EXPORTS
+
+  • Real product catalog covering Verkada, Axis, Bosch, Hanwha Vision,
+    Avigilon (35+ SKUs) with full specs.
+  • PDF floor-plan export — install-ready drawing, branded.
+  • CSV bill-of-materials export with real model numbers.
+  • CSV device-schedule export (one row per device).
+  • .dvjson project save/import for full round-trips.
+
+DEVICES
+
+  • Cameras: dome, bullet, PTZ, fisheye, multi-sensor, mini, modular.
+    Multi-sensor cameras have multiple lenses with independent FOV +
+    rotation offset.
+  • Readers: card, biometric, keypad, controller, lock.
+  • Sensors: motion, glass-break, door-contact, smoke, heat,
+    notification.
+  • Network: switch, access-point, NVR — with port count, PoE budget,
+    storage TB, retention days, Wi-Fi standard, coverage radius.
+  • Every device has: install status (proposed/installed/retired),
+    photo strip (data-URL stored with the design), critical dates
+    (warranty/last-inspected/end-of-life), notes, label.
+
+EDITOR UX
+
+  • 2D Konva canvas with grid, calibration tool, snap-to-wall.
+  • Warm-cream interior fill — drawn only inside the wall bounding
+    box, not the whole grid.
+  • Library panel (left) with drag-and-drop onto the canvas.
+  • Custom drag preview — the cursor shows the actual 3D device shape,
+    not the whole row, with a soft shadow underneath.
+  • 3D scene that auto-frames the floor on mount, with three view
+    modes:
+      orbit — drag to rotate, scroll to zoom
+      walk  — Google-Maps-style WASD first-person walkthrough
+      pov   — first-person view from a SPECIFIC camera you click,
+              framed by its real FOV with red viewfinder corners +
+              "● REC · POV" indicator
+  • Pegman drag — the cursor carries a LIVE 3D character (portal'd
+    R3F canvas tracking the mouse), not a static PNG. Drop on the
+    scene to enter walk mode at that exact world point.
+  • Layer toggles: show/hide by device type + install status.
+  • Doors as a first-class concept: pinned to walls, locked/unlocked,
+    linked to a controlling reader via controlsDoorId.
+  • Simulation mode: animate an actor along a path, log detection
+    events from cameras / sensors / readers.
+  • Camera Advisor (DORI calculator) — IEC 62676-4 detect/observe/
+    recognise/identify pixel densities at each distance.
+  • Cabling auto-route — Manhattan path × 1.15 slack from each
+    camera/reader to the nearest NVR/switch. Total length feeds the
+    quote.
+  • Resizable left + right sidebars with persistent widths in
+    localStorage.
+  • Right sidebar has tabs: Properties (selected device or floor
+    settings) and AI (the chat panel).
+  • Light mode only (theme toggle removed for a cleaner top bar).
+  • Single "Project" menu in the top bar replaces the old File +
+    Export buttons (save .dvjson · import · floor-plan PDF · BoM CSV
+    · device schedule CSV).
+  • Title-edit input auto-sizes to its text instead of stretching
+    across the bar.
+
+3D POLISH
+
+  • Procedural Canvas2D textures cached as THREE.CanvasTexture:
+      drywallTexture     — noise + paint-roller streaks on walls
+      woodFloorTexture   — light-oak planks with grain + knots
+      doorTexture        — wood grain with two raised panels + brass
+                           handle
+  • Each wall clones the drywall texture and sets per-wall repeats so
+    grain density stays consistent regardless of wall length.
+  • 3D doors render as wood-textured slabs with hinges + a strike-
+    plate band that goes red when the door is locked.
+  • Realistic device meshes — dome cameras with lenses, bullet
+    cameras with sunshades, PTZ heads with chrome bezels, NVRs with
+    port rows, etc. White/eggshell housings (Verkada/Axis style)
+    instead of generic black plastic.
+  • Fixed accidental-drag bug: 3D device drop-indicator rings used
+    to catch orbit clicks → device would get selected/moved when you
+    just wanted to look around. Indicator rings removed, every floor
+    decal now sets raycast=()=>null.
+
+3D AI CURSOR + ANNOTATIONS
+
+  • AICursorOverlay — when each chat-driven op lands, a labelled
+    pulsing marker pings at the target point with a colour + Lucide
+    icon matched to the action (Plus for add, Trash for remove,
+    MousePointer for move, RotateCw for rotate, StickyNote for
+    annotate, Receipt for quote, Ruler for calibrate, etc.).
+  • Floor.annotations[]: sticky-note style markers Claude (or the
+    user) can pin at any point. Three kinds: note (sky), warning
+    (amber), idea (violet). AI-authored annotations show a ✦ sparkle.
+    Click a marker → properties panel shows kind selector + textarea
+    + delete.
+
+============================================================
+THE AI AGENT — THIS IS THE CENTERPIECE
+============================================================
+
+The right-sidebar "AI" tab is a Cursor-style chat that has full live
+read/write access to the design. It's not a feature; it's the main
+way to drive the editor.
+
+INFRASTRUCTURE
+
+  • SSE streaming via /api/ai/chat. The server pushes events as Claude
+    generates:
+        event: text             incremental text deltas
+        event: operation        a parsed tool call (applied on the
+                                client immediately)
+        event: web_search       "searching for X" indicator
+        event: web_search_done  search completed
+        event: citation         web source URL + title
+        event: turn             new turn of the agent loop began
+        event: done | error
+  • Stateless server — the design lives in the client store. Every
+    chat turn ships the latest floor snapshot to the server so Claude
+    sees ground truth.
+  • Conversation memory:
+      - Persisted per design to localStorage (survives reloads).
+      - When sending to the server, history is trimmed to the last
+        14 messages; everything older is replaced by a synthetic
+        recap user message ("Earlier asks from the user… Actions
+        applied so far: add-device ×N, web-searches: N…").
+      - Token cost stays roughly flat no matter how long you chat.
+  • Esc / Stop button cancels an in-flight request mid-stream.
+
+TOOLS
+
+Design edits (apply to floor immediately):
+    add_device                add a camera/reader/sensor/network
+    move_device               relocate by id
+    rotate_device             change rotation
+    remove_device             delete by id
+    update_device             change label/range/FOV/mount/status/
+                              notes (and `model` for cameras)
+    add_wall, remove_wall     draw / delete walls
+    add_door                  pin a door on a wall id
+    set_floor_scale           recalibrate pixels-per-meter
+
+Annotations (visible sticky notes on the canvas):
+    add_annotation            kind = note | warning | idea
+    remove_annotation
+
+Quote (full read + write on the project bill of materials):
+    add_quote_line_item       (description, qty, unit cost, category)
+    remove_quote_line_item    by index
+    update_quote_settings     rates, client, location, brand color,
+                              narrative, etc.
+
+View (UI navigation):
+    view_from_camera          switch the 3D scene into camera-POV
+                              mode from a specific device id
+
+Research (server tool, results come back as inline citations):
+    web_search                Claude's official web_search_20250305
+                              tool, max_uses 5 per turn
+
+EVERY OPERATION HAS ITS OWN COLOUR + ICON, consistently applied to:
+  • the operation chip under each assistant message
+  • the BusyStatus pill while the action is in flight ("Searching
+    the web…", "Placing camera…", "Editing quote…")
+  • the AI-cursor marker on the canvas
+
+Colour palette:
+  add-device       emerald + Plus
+  remove-*         rose    + Trash2
+  move-device      indigo  + MousePointer2
+  rotate-device    violet  + RotateCw
+  update-device    amber   + WandSparkles
+  add-wall         emerald + PencilRuler
+  add-door         cyan    + DoorOpen
+  set-floor-scale  fuchsia + Ruler
+  add-annotation   yellow  + StickyNote (or orange/TriangleAlert
+                            for warning, violet/Lightbulb for idea)
+  quote ops        teal    + Receipt
+  view-from-camera rose    + Eye
+
+WHAT THE AI IS ACTUALLY GOOD AT (verified end-to-end)
+
+  • "Look up Verkada CD42 price and add 4 at the corners."
+    → 1 web_search, 4 cameras placed with the real $1,398 price
+    embedded in each note + 3 citations.
+
+  • "Find a 4K dome under $300 and add 4 of them."
+    → 2 web searches, 4× Reolink RLC-820A placed (real product,
+    real price), 3 citations from amazon/newegg/e-catalog.
+
+  • "Look up SF low-voltage permit cost, add it to my quote, pin a
+    warning on the front door (no reader), rotate the lobby cam to 0°."
+    → 1 web search, $446.40 permit line item added (from SF official
+    rates), warning annotation pinned, lobby cam rotated. All in
+    14 seconds, one prompt.
+
+  • "Add doors at the obvious entry points. Lock the server room door."
+    → 4+ doors placed across the design, server-room door's
+    strike-plate band rendered red in 3D.
+
+  • "Pin a warning at every door without a reader."
+    → AI identified all 5 unreadered doors, dropped 5 warning
+    annotations one at a time with live cursor pings on the canvas.
+
+  • "Show me the POV of the front-door camera."
+    → view_from_camera fired, scene flipped to first-person from
+    that camera with the red viewfinder frame + REC indicator.
+
+  • "Where should I put cameras in the conference room?"
+    → Claude correctly did NOT auto-place. It dropped 2 "idea"
+    annotation markers at proposed spots so the user can accept
+    them or ask Claude to apply.
+
+UNKNOWN-PRODUCT SYNTHESIS
+
+This was a deliberate, audited capability. If the user names a
+specific product NOT in DeeperVision's catalog ("add a Lorex N863A3"
+or "use the Hikvision DS-2CD2387G2"), the agent:
+
+  1. web_search "<brand> <model> spec sheet price"
+  2. Picks the closest 3D mesh subtype (bullet/dome/PTZ/etc.) so
+     the rendered shape matches the real device's silhouette.
+  3. add_device with type, subtype, label "<Brand> <Model>", and a
+     dedicated `model` field that persists on CameraDevice.model
+     so the BoM tracks the specific product.
+  4. add_quote_line_item with the researched price.
+  5. Cites the spec / price source in chat text.
+
+End-to-end verified: "Add a Lorex N863A3 4K bullet camera." →
+the agent ran 4 web searches, self-corrected when it discovered
+N863A3 is the NVR not a camera, found the comparable Lorex E842CA
+bullet at $109.99 from Lorex Pro, placed it with subtype=bullet,
+FOV 106°, range 30m, mount 2.8m, and added $109.99 to the quote as
+a materials line item.
+
+QUOTE AGENT BEHAVIOUR
+
+  • Every chat turn ships Claude the FULL bill of materials (model,
+    vendor, qty, unit price, subtotal) + hardware/labor/grand totals
+    as part of the floor context.
+  • "Audit my quote" → Claude runs web_search on the priced models,
+    cites real sources, and either updates rates via
+    update_quote_settings or pins a warning annotation when it
+    spots a stale price it doesn't want to silently overwrite.
+  • "Review for integration concerns" → Claude reads the BoM's
+    vendor column, flags mixed-ecosystem combos (Verkada cameras
+    paired with an Axis NVR, for example) as warning annotations,
+    and recommends a compatible alternative or bridge product via
+    web_search if needed.
+
+============================================================
+QUOTE DRAWER — REDESIGNED + LIVE IN CHAT
+============================================================
+
+  • Three clean tabs at the top: Overview · Rates · Branding.
+  • Overview leads with a hero "Grand Total $X" card with three
+    breakdown chips (Hardware / Labor + cabling / Tax).
+  • The location-aware AI estimator (existing AI Quote Assistant)
+    lives prominently on Overview.
+  • Bill of Materials table, labor + installation, AI-added extra
+    line items, totals all below.
+  • Rates tab has the 6 editable rate fields (labor, cabling per
+    camera/reader, commissioning, markup, tax).
+  • Branding tab: logo upload, accent color, print footer line.
+  • Quote button icon is now Banknote (was Receipt) for a cleaner,
+    more premium feel.
+
+LIVE QUOTE INSIDE THE AI CHAT
+
+The headline win: you don't have to leave the chat to see the quote.
+A compact InlineQuoteCard sits at the top of the AI tab. Collapsed
+state shows the grand total + device count in one line. Click to
+expand:
+
+  • Hero stats (Hardware / Labor / Tax)
+  • Live BoM table grouped by model
+  • Extra line items with category pills
+  • "Print quote" button that opens the standalone drawer for PDF
+  • "AI tuned · <city>" chip when the AI Quote Assistant has
+    localized the rates
+
+The card recomputes from the store on every render, so as Claude
+runs add_quote_line_item / update_quote_settings / remove_device
+the numbers reanimate in real time. The card hides when the floor
+has zero priced devices (so you never see a phantom $922 commissioning
+total before anything is placed).
+
+============================================================
+AI SURVEY + AI ADVISOR — TWO OTHER AGENT WORKFLOWS
+============================================================
+
+  • AI Survey: upload a floor-plan image → Claude traces walls + sets
+    scale. WALLS ONLY — doesn't auto-place devices, because users
+    wanted to add devices themselves. Re-running preserves your
+    placed devices.
+  • AI Advisor (right-side panel): coverage audit. Claude returns
+    a punch list of findings with severity (critical/warning/
+    suggestion), each with a one-click "Apply" that mutates the
+    store (add-device / rotate-device / remove-device / move-device
+    / manual-review). Verified with a 7-finding run on the demo
+    floor.
+
+============================================================
+INSTRUMENTATION + STORE
+============================================================
+
+  • Zustand store at lib/store.ts, persisted under
+    "deeper-vision-store" v6 with migrations:
+        v3→v4  added device installStatus + photos + dates
+        v4→v5  added Floor.doors[]
+        v5→v6  added Floor.annotations[]
+  • Temporal middleware (zundo) provides undo/redo across most
+    edits.
+  • Global flags: aiSurveyOpen, aiAdvisorOpen, quoteOpen, rightTab,
+    aiCursor (transient ping), cameraPovTargetId, walkSpawnOverride,
+    visibility (byType + byStatus).
+  • Chat history persistence keyed by design id under
+    "dv-chat-history:<id>".
+  • Sidebar widths persisted under "dv-library-width" and
+    "dv-right-width".
+
+============================================================
+FILES OF NOTE (the meat of what we shipped)
+============================================================
+
+API routes
+  app/api/ai/chat/route.ts            SSE streaming, 14 tools,
+                                      web_search, multi-turn loop
+  app/api/ai/advisor/route.ts         coverage audit
+  app/api/ai/quote/route.ts           location-aware pricing
+  app/api/ai/survey/route.ts          floor-plan image → walls
+
+Editor
+  components/editor/EditorShell.tsx   resizable sidebars + global
+                                      mounts (AISurveyDialog,
+                                      AIAdvisorPanel, QuoteDrawer)
+  components/editor/TopBar.tsx        single Project menu, Banknote
+                                      Quote button, auto-sized title
+  components/editor/RightSidebar.tsx  Properties / AI tab strip
+  components/editor/PropertiesPanel.tsx
+                                      device + door + annotation
+                                      forms
+
+Canvas 2D
+  components/canvas2d/Canvas2DStage.tsx
+  components/canvas2d/AnnotationsLayer.tsx
+  components/canvas2d/AICursorOverlay.tsx
+
+Canvas 3D
+  components/scene3d/Scene3D.tsx              mode panel + Pegman
+  components/scene3d/Scene3DCanvas.tsx        R3F scene, FloorPlane,
+                                              Wall3D, Device3D, doors
+  components/scene3d/CameraPovController.tsx  POV camera positioning
+  components/scene3d/Door3D.tsx               wooden door slabs
+  components/scene3d/textures.ts              procedural drywall /
+                                              wood floor / door
+  components/scene3d/PegmanCharacter.tsx      live 3D drag avatar
+
+AI
+  components/ai/AIChatPanel.tsx          streaming chat UI
+  components/ai/InlineQuoteCard.tsx      live quote summary in chat
+  components/ai/AISurveyDialog.tsx       walls-only survey
+  components/ai/AIAdvisorPanel.tsx       coverage audit
+  lib/ai-chat.ts                         streamAIChat, trim,
+                                         persist, apply ops
+  lib/ai-survey.ts, lib/ai-quote.ts, lib/ai-advisor.ts, lib/ai-apply.ts
+
+Quote
+  components/quote/QuoteDrawer.tsx       tabbed Overview/Rates/
+                                         Branding drawer
+  lib/pricing.ts                         BoM + computeQuote()
+  lib/cabling.ts                         auto-route
+
+Types + store
+  types/design.ts                        Device, Door, Annotation,
+                                         Floor, DesignDocument
+  lib/store.ts                           Zustand store + migrations
+  lib/catalog.ts                         real product catalog
+  lib/demo-design.ts                     demo office seed
+
+============================================================
+HOW TO RUN LOCALLY
+============================================================
+
+  npm install
+  cp .env.local.example .env.local      # add ANTHROPIC_API_KEY
+  npm run dev -- -p 3099                # or whatever port
+
+  → http://localhost:3099
+
+============================================================
+DEPLOY (after pulling)
+============================================================
+
+  git push origin <branch>:main          # source-of-truth on GitHub
+  npx vercel --prod                      # build + deploy
+  npx vercel alias set <new-url> deeper-vision-self.vercel.app
+
+Production URL always lives at
+https://deeper-vision-self.vercel.app — alias hand-off is the only
+step between a successful deploy and the canonical URL serving it.
+
+============================================================
+EVERYTHING IS SAVED
+============================================================
+
+Current state:
+  • Working tree clean — no uncommitted edits.
+  • Local branch claude/elastic-snyder-e5729c has the full history.
+  • origin/main is up to date with that branch (latest commit
+    b5154d9 — "Calmer chat empty state, hide phantom quote,
+    synthesize unknown products").
+  • Latest production deployment is aliased to
+    https://deeper-vision-self.vercel.app.
+
+The most recent few commits, oldest at the bottom:
+
+  b5154d9  Calmer chat empty state, hide phantom quote,
+           synthesize unknown products
+  bf2ab1a  Top-bar polish + tabbed quote + live quote card in chat
+  ffb0fe2  Resizable sidebars, smaller pegman, no coverage button,
+           live 3D drag, textures + 3D doors
+  9f1858d  Fix accidental device-drag in 3D orbit; clean up
+           phantom floor patches
+  68669e7  Chat memory, camera POV view, and proactive suggestions
+  14d7d41  Integrate AI chat into the right sidebar; agent cursor
+           on canvas; black bubbles; walls-only Survey
+  892d2b9  Add AI chat editor — Cursor-for-floor-plans
+  855f6d3  Fix AI Survey coordinate compression on large floor-
+           plan images
+  d051feb  Use the actual 3D simulator character for the Pegman
+           drag handle
+  08d51b0  Floor scoping, library polish, network specs, Pegman
+           walk drop
+  1cb0cd7  Workflow features: lifecycle, doors, branded reports,
+           DORI, cabling, AI advisor
+  a6ea062  Editor UX polish + blue theme + AI Survey + AI Quote
+           Assistant
