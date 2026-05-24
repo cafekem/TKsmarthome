@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -10,7 +9,6 @@ import {
   Pause,
   Play,
   Radio,
-  RotateCcw,
   ShieldAlert,
   X,
 } from "lucide-react";
@@ -18,7 +16,6 @@ import { Scene3D } from "@/components/scene3d/Scene3D";
 import { useActiveFloor } from "@/lib/store";
 import { useSimStore } from "@/lib/sim-store";
 import { cn } from "@/lib/utils";
-import { positionOnPath } from "@/lib/detection";
 
 export function SimView() {
   const floor = useActiveFloor();
@@ -31,11 +28,122 @@ export function SimView() {
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <Scene3D showSim />
+      {/* CSS film-stock grade applied directly to the 3D canvas wrapper.
+          Aiming for the "cinematic ND filter" look: very slight desat +
+          a touch of contrast lift, brightness left alone. The earlier
+          0.82 saturate + 0.98 brightness + hue rotate combo read as a
+          horror movie — too dim, too cool. This pass is lighter and
+          warmer, closer to what colorists do on a daylight scene. */}
+      <div
+        className="absolute inset-0"
+        style={{
+          filter: "saturate(0.92) contrast(1.04) brightness(1.02)",
+        }}
+      >
+        <Scene3D showSim />
+      </div>
+      {/* Very soft radial vignette on top of the canvas. Dropped the
+          previous 0.55 opacity edge — it was crushing the scene into
+          darkness. 0.18 reads as a subtle frame, not a tunnel. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, transparent 65%, rgba(0,0,0,0.18) 100%)",
+        }}
+      />
+      {/* Cinemascope letterbox bars — slide in from the top + bottom on
+          mount so flipping into Sim mode feels like a film opening. */}
+      <CinemascopeBars />
+      {/* Cutaway HUD — visible briefly when the camera cuts to a
+          detecting camera's POV. Sells the "we're now watching the
+          surveillance feed" beat. */}
+      <CutawayHud />
       <SimControls />
       <FollowExitButton />
       <AfterActionReport />
     </div>
+  );
+}
+
+/**
+ * Top-left REC label + viewfinder corners that appear during a cutaway
+ * (when the chase camera has temporarily switched to a security camera's
+ * POV). Drives the user's read of "this is what camera X sees right
+ * now". Auto-hides when the cutaway state clears.
+ */
+function CutawayHud() {
+  const floor = useActiveFloor();
+  const cutawayCamId = useSimStore((s) => s.cutawayCamId);
+  if (!cutawayCamId || !floor) return null;
+  const cam = floor.devices.find((d) => d.id === cutawayCamId);
+  const label = cam?.label ?? "CAM";
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 z-20"
+      style={{
+        animation: "dv-cutaway-flash 1.4s ease-out both",
+      }}
+    >
+      {/* Rose viewfinder border — same chrome as the manual POV view */}
+      <div className="absolute inset-[12vh] border-2 border-rose-500/70 rounded-sm shadow-[inset_0_0_60px_rgba(0,0,0,0.5)]" />
+      {/* REC badge */}
+      <div className="absolute left-6 top-[13vh] inline-flex items-center gap-1.5 rounded-full bg-black/65 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide text-rose-300">
+        <span className="size-1.5 rounded-full bg-rose-500 animate-pulse" />
+        REC · {label}
+      </div>
+      <style>{`
+        @keyframes dv-cutaway-flash {
+          0%   { background-color: rgba(255,255,255,0.55); }
+          18%  { background-color: rgba(255,255,255,0); }
+          100% { background-color: rgba(255,255,255,0); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/**
+ * Cinemascope letterbox bars: two black 12vh strips that animate in from
+ * the screen edges over ~0.6s on mount. Frames the sim canvas like a
+ * 2.35:1 film. They live above the canvas but below the HUD chrome.
+ */
+function CinemascopeBars() {
+  return (
+    <>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-0 right-0 top-0 z-20 bg-black"
+        style={{
+          height: "11vh",
+          animation: "dv-letterbox-top 0.6s cubic-bezier(0.4,0,0.2,1) both",
+          boxShadow: "0 4px 14px rgba(0,0,0,0.4)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 bg-black"
+        style={{
+          height: "11vh",
+          animation: "dv-letterbox-bot 0.6s cubic-bezier(0.4,0,0.2,1) both",
+          boxShadow: "0 -4px 14px rgba(0,0,0,0.4)",
+        }}
+      />
+      {/* Keyframes inline so we don't have to touch global CSS for a
+          one-off animation. */}
+      <style>{`
+        @keyframes dv-letterbox-top {
+          from { transform: translateY(-100%); }
+          to   { transform: translateY(0); }
+        }
+        @keyframes dv-letterbox-bot {
+          from { transform: translateY(100%); }
+          to   { transform: translateY(0); }
+        }
+      `}</style>
+    </>
   );
 }
 
@@ -60,89 +168,45 @@ function FollowExitButton() {
   );
 }
 
+/**
+ * Minimal sim controls bar — three things only: Play/Pause, speed pills,
+ * blind percent. Earlier versions had a timeline scrubber + restart +
+ * elapsed-time numbers + tracking-count + status dot, but they cluttered
+ * the cinematic frame. The bar now stays out of the way unless you're
+ * actually scrubbing playback or speed.
+ */
 function SimControls() {
-  const floor = useActiveFloor();
   const running = useSimStore((s) => s.running);
   const speed = useSimStore((s) => s.speed);
-  const t = useSimStore((s) => s.t);
   const play = useSimStore((s) => s.play);
   const pause = useSimStore((s) => s.pause);
-  const reset = useSimStore((s) => s.reset);
   const setSpeed = useSimStore((s) => s.setSpeed);
-  const detectingCameras = useSimStore((s) => s.detectingCameras);
   const coveredTime = useSimStore((s) => s.coveredTime);
   const blindTime = useSimStore((s) => s.blindTime);
 
-  const doneAt = useMemo(() => {
-    if (!floor || !floor.simPath) return 0;
-    const { doneAt } = positionOnPath(floor.simPath, 0, 1.4, floor.scale);
-    return doneAt;
-  }, [floor?.simPath, floor?.scale, floor]);
-
-  const progress = doneAt > 0 ? Math.min(1, t / doneAt) : 0;
-  const detectionCount = detectingCameras.size;
   const totalElapsed = coveredTime + blindTime;
-  const coveragePct =
-    totalElapsed > 0.001 ? Math.round((coveredTime / totalElapsed) * 100) : 0;
-
-  // Status indicator color — single dot that summarizes coverage at a glance
-  const statusColor =
-    detectionCount > 0
-      ? "bg-primary"
-      : coveragePct >= 50
-        ? "bg-amber-500"
-        : "bg-rose-500";
+  const blindPct =
+    totalElapsed > 0.001 ? Math.round((blindTime / totalElapsed) * 100) : 0;
 
   return (
     <div className="absolute bottom-6 left-1/2 z-30 -translate-x-1/2">
-      <div className="flex items-center gap-2.5 rounded-full bg-background/75 px-2 py-1.5 shadow-[0_12px_40px_-14px_rgba(0,0,0,0.35)] backdrop-blur-2xl ring-1 ring-black/[0.06] dark:ring-white/[0.06]">
+      <div className="flex items-center gap-2 rounded-full bg-background/80 px-2 py-1.5 shadow-[0_12px_40px_-14px_rgba(0,0,0,0.35)] backdrop-blur-2xl ring-1 ring-black/[0.06] dark:ring-white/[0.06]">
         {/* Play / Pause */}
         <button
           type="button"
           onClick={() => (running ? pause() : play())}
           className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-full transition-all",
-            "bg-foreground text-background hover:scale-[1.04] active:scale-[0.97]"
+            "flex size-9 shrink-0 items-center justify-center rounded-full transition-all",
+            "bg-foreground text-background hover:scale-[1.04] active:scale-[0.97]",
           )}
           aria-label={running ? "Pause" : "Play"}
         >
           {running ? (
-            <Pause className="size-3 fill-current" />
+            <Pause className="size-3.5 fill-current" />
           ) : (
-            <Play className="size-3 fill-current translate-x-px" />
+            <Play className="size-3.5 fill-current translate-x-px" />
           )}
         </button>
-
-        {/* Reset */}
-        <button
-          type="button"
-          onClick={reset}
-          className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
-          aria-label="Restart"
-        >
-          <RotateCcw className="size-3" strokeWidth={2} />
-        </button>
-
-        {/* Timeline */}
-        <div className="flex w-[280px] items-center gap-2.5 px-1">
-          <span className="text-[0.72rem] tabular-nums font-medium text-foreground/85 w-9 text-right">
-            {t.toFixed(1)}s
-          </span>
-          <div className="relative h-1 flex-1 overflow-visible">
-            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-foreground/[0.08]" />
-            <div
-              className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-foreground/85 transition-[width] duration-100"
-              style={{ width: `${progress * 100}%` }}
-            />
-            <div
-              className="absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground"
-              style={{ left: `${progress * 100}%` }}
-            />
-          </div>
-          <span className="text-[0.72rem] tabular-nums text-muted-foreground/65 w-10">
-            {doneAt.toFixed(1)}s
-          </span>
-        </div>
 
         {/* Speed — compact segmented control */}
         <div className="flex shrink-0 items-center gap-px rounded-full bg-foreground/[0.05] p-0.5">
@@ -152,10 +216,10 @@ function SimControls() {
               type="button"
               onClick={() => setSpeed(s)}
               className={cn(
-                "rounded-full px-1.5 py-0.5 text-[0.7rem] tabular-nums transition-colors",
+                "rounded-full px-2 py-0.5 text-[0.72rem] tabular-nums transition-colors",
                 speed === s
                   ? "bg-card text-foreground shadow-[0_1px_2px_-1px_rgba(0,0,0,0.18)]"
-                  : "text-muted-foreground/85 hover:text-foreground"
+                  : "text-muted-foreground/85 hover:text-foreground",
               )}
             >
               {s}×
@@ -163,15 +227,20 @@ function SimControls() {
           ))}
         </div>
 
-        {/* Status indicator — a single dot + concise label so the banner stays small */}
-        <div className="flex shrink-0 items-center gap-1.5 pl-1.5 pr-2">
-          <span className={cn("size-1.5 rounded-full", statusColor)} aria-hidden="true" />
-          <span className="text-[0.72rem] font-medium tabular-nums text-foreground/85">
-            {detectionCount > 0 ? `${detectionCount} on subject` : "blind"}
-          </span>
-          <span className="text-[0.7rem] tabular-nums text-muted-foreground/70">
-            · {coveragePct}%
-          </span>
+        {/* Blind score — single pill, color shifts as coverage drops. */}
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[0.72rem] font-medium tabular-nums",
+            blindPct >= 50
+              ? "bg-rose-500/15 text-rose-500"
+              : blindPct >= 20
+                ? "bg-amber-500/15 text-amber-600"
+                : "bg-emerald-500/15 text-emerald-600",
+          )}
+          title={`${blindPct}% of elapsed sim time the subject was in a blind spot`}
+        >
+          <span className="opacity-70">Blind</span>
+          {blindPct}%
         </div>
       </div>
     </div>

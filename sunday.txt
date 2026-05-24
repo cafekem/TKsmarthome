@@ -184,3 +184,187 @@ After every batch of fixes:
 ==============================================================================
  End of Sunday log.  Good run.
 ==============================================================================
+
+
+==============================================================================
+ DeeperVision — Monday work log (2026-05-25)
+==============================================================================
+
+Live production URL: https://deeper-vision-self.vercel.app
+GitHub repo:         https://github.com/mohosy/DeeperVision
+
+------------------------------------------------------------------------------
+ What we shipped today (highest impact first)
+------------------------------------------------------------------------------
+
+1. CINEMATIC SIM MODE — full overhaul
+   The simulator used to look like a CAD walkthrough. After this pass it
+   reads as security-footage cinema:
+
+   • Cinemascope letterbox bars slide in from top + bottom over 0.6s
+     when you flip to Sim. Frames the canvas like a 2.35:1 widescreen
+     film.
+
+   • Film-stock ND-filter look — `saturate(0.92) contrast(1.04)
+     brightness(1.02)` on the canvas, plus a soft radial vignette
+     (transparent center → 18% black corners). Earlier pass was too
+     dark + cool and read as horror; toned it down to a colorist's
+     filmic pass.
+
+   • Auto-follow chase camera. The user used to have to click a Follow
+     billboard above the actor. Now sim auto-follows. The chase camera
+     is 9m back / 5.5m up so you can see both the subject AND the
+     surrounding cameras reacting to them.
+
+   • Cinematic intro fly-in (1.2s cubic ease-out from the previous
+     orbit pose into chase) + damped-lerp follow (exponential decay
+     with ~150ms half-life) so the camera has weight, not rigid
+     tracking.
+
+   • Cinematic CUTAWAY — when a NEW camera locks onto the threat
+     (0→1 detection edge), the chase view hijacks for 1.4s and
+     renders THROUGH that security camera's POV, then snaps back to
+     chase pose at the actor's current position. Short white flash +
+     "REC · cam-name" badge sells the surveillance-feed cut. Cooldown
+     is 5s after each cut so it doesn't fire constantly.
+
+   • Cameras visually TRACK the subject when detecting — a
+     CameraYawTracker wraps each device's yaw group; for cameras in
+     the detectingCameras set, it lerps the yaw toward facing the
+     subject. The body-language of "the camera is watching them" sells
+     the security system being alive.
+
+   • Spotlight cones from every detecting camera to the subject —
+     additive-blended translucent emerald cones aligned along the
+     beam, replaces the previous "shooting data beads" effect that
+     looked like the cameras were firing projectiles.
+
+   • Auto-collapse both sidebars when entering Sim mode. The
+     pre-sim collapse state is snapshotted and restored on exit;
+     localStorage persistence is skipped while in sim so refreshing
+     mid-sim doesn't pollute the user's saved layout.
+
+   • Sim controls bar stripped to the bare minimum: Play/Pause,
+     1×/2×/4× speed pills, and a single Blind-% pill that color-shifts
+     (green < 20% → amber < 50% → rose ≥ 50%). Timeline scrubber,
+     restart button, elapsed numbers, tracking-count, status dot — all
+     gone.
+
+2. THE THREAT — turned a tourist pegman into an actual intruder
+   • Full criminal redesign: dark hoodie + off-black pants + dark
+     gloves + full balaclava (horizontal eye-slit revealing skin and
+     black eyes, hood seam ridge).
+   • Realistic human proportions — the original pegman was 1.31m tall
+     with a 0.62m-wide head (cartoon). Now ~1.70m tall, legs 0.80m,
+     torso 0.36w × 0.55h × 0.22d, head 0.20w × 0.24h × 0.20d. Fits
+     through a 2.05m door at adult scale.
+   • Subject STARTS OUTSIDE the building — pre-pended two waypoints
+     south of the front entry door, so the cinematic intro opens on
+     the masked intruder approaching the building from the sidewalk,
+     then walking in. (Old path started inside the vestibule and
+     skipped the entrance.)
+   • Outline color reacts to detection: 0 cams = black,
+     1 = emerald, ≥2 = alarm red.
+   • Footprint ring + outer aura now invisible until a camera locks —
+     the intruder doesn't carry a "you are here" puck around.
+   • (Earlier iteration carried a crowbar held like a sword + swung
+     it periodically; removed in final pass at user request — the
+     threat now walks empty-handed, motion alone carries the menace.)
+
+3. POV MODE — proper FOV + manual pan arrows
+   • Reverted an earlier hack that forced fisheye / multi-sensor
+     cameras to 170° FOV — read as a warped wide-angle smear. POV now
+     uses the device's spec'd horizontal FOV, capped at 110° for
+     readability.
+   • Added per-camera PAN OFFSET state in the design store with
+     `nudgeCameraPovPan(deltaRad)`. Reset to 0 on POV enter/exit.
+   • ◀/▶ arrow buttons in the POV viewfinder UI (only shown for
+     cameras that physically swivel: dome, fisheye, multi-sensor,
+     PTZ). 10° per click; ⌘/Ctrl-click for 30°. A bottom-center pill
+     shows the current pan angle (e.g. `+45°`) and clicking it snaps
+     back to spec heading. Pan offset capped at ±90° so the user
+     can't pan behind the device.
+   • Bug fix: POV used to mutate the camera's `.fov / .near / .far`
+     and never restore them, so exiting POV left orbit with a 50m
+     far plane that clipped the surrounding tile-grid floor into a
+     triangular cut. Now snapshots + restores in a useEffect cleanup.
+   • Detection pulse / scanner / REC dot are suppressed on whichever
+     camera is currently being viewed THROUGH (manual POV or auto-
+     cutaway). They were sitting at the lens position and blocking
+     the virtual camera's view.
+
+4. PROJECT GEAR MENU — replaces the old "Project" dropdown
+   The top-right "Project" button with the chevron is now just an
+   icon-only gear. Click to drop a richer menu:
+     • SCENE section with:
+         – Time of day toggle (Day / Sunset) — moved from the floating
+           strip on the 3D canvas into the gear menu
+         – Walls picker: Drywall / Painted / Concrete / Brick (each
+           is a tile with an inline SVG swatch showing the texture)
+         – Floor picker: Wood / Tile / Concrete / Carpet (same
+           swatch-tile pattern)
+     • Project file (Save .dvjson / Import)
+     • Export (Floor plan PDF / Permit / BoM / Schedule / Photo tour)
+     • Help (Take the tour)
+   • Wall switch bug fix: the Wall3D's useMemo deps were missing
+     `wallStyle`, so picking Brick from the menu didn't actually
+     recompute the texture. Added the dep — now it switches live.
+   • New tile + concrete + carpet floor textures (procedural canvas
+     textures with per-style roughness/metalness so each material
+     reads correctly).
+
+5. LIBRARY (LEFT SIDEBAR) — visual polish
+   • Library item 3D-preview clipping fixed. The rotating device
+     previews used to clip at the corners during rotation because
+     each LAYOUT.scale was hand-tuned for the device front-on; added
+     a global 0.78× rotation-headroom multiplier and widened the
+     camera frustum (near 0.01, far 100).
+   • Sidebar collapse/expand smoothly animates (240ms cubic-bezier
+     width transition) instead of snapping. Transition is only
+     active during collapse — drag-to-resize stays buttery.
+
+6. TOP BAR / 3D STRIP — reorganized
+   • Coverage toggle moved out of the top bar into the 3D scene's
+     left tool strip (alongside Wiring, between Orbit + Wire). Uses
+     the amber Eye / EyeOff icon, matches the existing button style.
+   • Quote button icon: Banknote → Calculator (better fit for
+     "estimate").
+
+7. DEMO FLOOR — scaled up + decorated
+   • Whole demo floor plan scaled 1.45× — from 32m×22m → ~46m×32m.
+     Smallest room (break room 4×4m) grew to 5.8×5.8m. Everything
+     proportional: walls, doors, devices, furniture, sim path all
+     multiplied by the same constant.
+   • Wall decorations added (demo only):
+     – 4 paintings (conference, lobby, open office, lounge)
+     – 2 vending machines (open office, lounge) — branded red +
+       white label panel with a glass-front grid of colored
+       products lit by an emissive interior. Reads as a real
+       Coca-Cola-style consumer machine, not a black locker.
+     – 9 outlets sprinkled along walls in 6 different rooms.
+   • Windows were tried + then removed (user feedback: bad idea).
+
+------------------------------------------------------------------------------
+ Files touched today (notable ones only)
+------------------------------------------------------------------------------
+
+  components/simulation/Actor3D.tsx              criminal threat redesign
+  components/simulation/SimView.tsx              letterbox + film grade + stripped controls
+  components/simulation/ActorFollowController.tsx cinematic intro + damped chase + cutaway
+  components/simulation/DetectionVisualizer3D.tsx cutaway trigger + spotlight cones
+  components/scene3d/Scene3D.tsx                 coverage moved + POV pan arrows
+  components/scene3d/Scene3DCanvas.tsx           CameraYawTracker + floor styles + hide-on-POV
+  components/scene3d/CameraPovController.tsx     pan offset + frustum restore
+  components/scene3d/Furniture3D.tsx             painting + vending + outlet meshes
+  components/scene3d/textures.ts                 tile / concrete / carpet floor textures
+  components/editor/TopBar.tsx                   gear menu + swatch tiles + Calculator icon
+  components/editor/EditorShell.tsx              auto-collapse sidebars in sim
+  components/editor/DevicePreview3DCanvas.tsx    rotation-headroom for library previews
+  lib/store.ts                                   cameraPovPanOffset state + actions
+  lib/sim-store.ts                               cutaway state + auto-follow default
+  lib/demo-design.ts                             1.45× scale + wall dressing
+  types/design.ts                                FloorStyle + painting/vending/outlet types
+
+==============================================================================
+ End of Monday log.  Onward.
+==============================================================================

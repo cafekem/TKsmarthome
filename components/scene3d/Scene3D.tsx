@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
-import { Cable as CableIcon, Compass, Eye, LogOut, Move3d, Sparkles, Sun, Sunset, Upload } from "lucide-react";
+import { Cable as CableIcon, ChevronLeft, ChevronRight, Compass, Eye, EyeOff, LogOut, Move3d, RotateCcw, Sparkles, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useActiveFloor, useDesignStore } from "@/lib/store";
@@ -22,10 +22,10 @@ export function Scene3D({ showSim = false }: { showSim?: boolean } = {}) {
   const floor = useActiveFloor();
   const threeDMode = useDesignStore((s) => s.threeDMode);
   const setThreeDMode = useDesignStore((s) => s.setThreeDMode);
-  const timeOfDay = useDesignStore((s) => s.timeOfDay);
-  const setTimeOfDay = useDesignStore((s) => s.setTimeOfDay);
   const tool = useDesignStore((s) => s.tool);
   const setTool = useDesignStore((s) => s.setTool);
+  const showCoverage = useDesignStore((s) => s.showCoverage);
+  const toggleCoverage = useDesignStore((s) => s.toggleCoverage);
   const cameraPovTargetId = useDesignStore((s) => s.cameraPovTargetId);
   const exitCameraPov = useDesignStore((s) => s.exitCameraPov);
   const povTarget = floor?.devices.find(
@@ -80,21 +80,21 @@ export function Scene3D({ showSim = false }: { showSim?: boolean } = {}) {
             {!isEmpty && threeDMode === "orbit" && (
               <>
                 <div className="my-1 h-px w-6 bg-border/70" />
+                {/* Coverage toggle — used to live in the top bar, moved
+                    here so all scene-rendering toggles are in one place. */}
                 <TimeButton
-                  icon={Sun}
-                  label="Daytime"
-                  active={timeOfDay === "day"}
-                  onClick={() => setTimeOfDay("day")}
+                  icon={showCoverage ? Eye : EyeOff}
+                  label={
+                    showCoverage
+                      ? "Hide camera coverage"
+                      : "Show camera coverage"
+                  }
+                  active={showCoverage}
+                  onClick={() => toggleCoverage()}
                 />
-                <TimeButton
-                  icon={Sunset}
-                  label="Sunset"
-                  active={timeOfDay === "dusk"}
-                  onClick={() => setTimeOfDay("dusk")}
-                />
-                <div className="my-1 h-px w-6 bg-border/70" />
                 {/* Wire tool — click source device, then target. Shift-
-                    click the floor to drop a bend. Esc cancels. */}
+                    click the floor to drop a bend. Esc cancels. Day /
+                    Sunset toggle moved to the gear menu in the top bar. */}
                 <TimeButton
                   icon={CableIcon}
                   label="Wire (click source device, then target)"
@@ -152,6 +152,14 @@ export function Scene3D({ showSim = false }: { showSim?: boolean } = {}) {
             </div>
           </div>
 
+          {/* Pan controls — only for cameras that physically swivel in
+              real life. Lets the operator sweep across a dome / fisheye /
+              multi-sensor's wide coverage one frame at a time instead of
+              cramming it all into a distorted single view. */}
+          {povTarget.type === "camera" && canCameraPan(povTarget.cameraType) && (
+            <PovPanControls />
+          )}
+
           <button
             type="button"
             onClick={() => exitCameraPov()}
@@ -163,6 +171,81 @@ export function Scene3D({ showSim = false }: { showSim?: boolean } = {}) {
         </>
       )}
     </div>
+  );
+}
+
+/** Which camera subtypes have a physical/PTZ pan we should expose as
+ *  manual ◀/▶ arrows in POV. Fixed/bullet/lpr stay nailed to their
+ *  mount heading. */
+function canCameraPan(subtype: string | undefined): boolean {
+  return (
+    subtype === "dome" ||
+    subtype === "fisheye" ||
+    subtype === "multi-sensor" ||
+    subtype === "ptz"
+  );
+}
+
+/**
+ * Twin pan arrows (◀ + ▶) at the left + right edges of the POV
+ * viewfinder, plus a tiny "recenter" pill at the bottom. Each click
+ * nudges the camera's heading by ±10°. Holding ⌘/Ctrl while clicking
+ * makes the step ±30° for fast sweeping.
+ *
+ * Sits above the viewfinder chrome (z-30) so the arrows are clickable
+ * even though the chrome itself is pointer-events:none.
+ */
+function PovPanControls() {
+  const nudgeCameraPovPan = useDesignStore((s) => s.nudgeCameraPovPan);
+  const panOffset = useDesignStore((s) => s.cameraPovPanOffset);
+  const STEP = (10 * Math.PI) / 180;
+  const FAST = (30 * Math.PI) / 180;
+  const degrees = Math.round((panOffset * 180) / Math.PI);
+
+  function pan(direction: -1 | 1, e: React.MouseEvent) {
+    const step = e.metaKey || e.ctrlKey ? FAST : STEP;
+    nudgeCameraPovPan(direction * step);
+  }
+
+  function recenter() {
+    // Re-set absolute: nudge by `-current` so we land exactly at 0.
+    nudgeCameraPovPan(-panOffset);
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={(e) => pan(-1, e)}
+        title="Pan left (⌘/Ctrl for larger step)"
+        aria-label="Pan camera left"
+        className="pointer-events-auto absolute left-8 top-1/2 z-30 -translate-y-1/2 inline-flex size-12 items-center justify-center rounded-full border border-rose-500/40 bg-black/55 text-white shadow-[0_8px_28px_-6px_oklch(0_0_0/55%)] backdrop-blur transition-all hover:bg-black/75 hover:border-rose-400/70 hover:scale-105 active:scale-95"
+      >
+        <ChevronLeft className="size-6" strokeWidth={2.4} />
+      </button>
+      <button
+        type="button"
+        onClick={(e) => pan(1, e)}
+        title="Pan right (⌘/Ctrl for larger step)"
+        aria-label="Pan camera right"
+        className="pointer-events-auto absolute right-8 top-1/2 z-30 -translate-y-1/2 inline-flex size-12 items-center justify-center rounded-full border border-rose-500/40 bg-black/55 text-white shadow-[0_8px_28px_-6px_oklch(0_0_0/55%)] backdrop-blur transition-all hover:bg-black/75 hover:border-rose-400/70 hover:scale-105 active:scale-95"
+      >
+        <ChevronRight className="size-6" strokeWidth={2.4} />
+      </button>
+      {/* Recenter pill — shows current pan angle, lets the user snap
+          back to the device's mounted heading. Hidden when offset = 0. */}
+      {Math.abs(panOffset) > 0.001 && (
+        <button
+          type="button"
+          onClick={recenter}
+          title="Recenter to spec heading"
+          className="pointer-events-auto absolute left-1/2 bottom-7 z-30 -translate-x-1/2 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-[0.72rem] font-mono text-white shadow-lg backdrop-blur transition-colors hover:bg-black/80"
+        >
+          <RotateCcw className="size-3" strokeWidth={2.2} />
+          {degrees > 0 ? `+${degrees}°` : `${degrees}°`} · recenter
+        </button>
+      )}
+    </>
   );
 }
 

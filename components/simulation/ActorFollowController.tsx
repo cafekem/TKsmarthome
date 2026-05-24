@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Billboard, Text } from "@react-three/drei";
 import * as THREE from "three";
-import { Eye } from "lucide-react";
 
 // Minimal subset of drei's OrbitControls instance API that we touch.
 // Avoids pulling in the `three-stdlib` type package just for one symbol.
@@ -18,27 +16,14 @@ import { collideAgainstWalls, positionOnPath } from "@/lib/detection";
 import { WALK_SPEED } from "@/lib/walk";
 
 /**
- * Floats a clickable "Follow" badge over the actor in sim mode. When the
- * user clicks it (or any HUD button that calls startFollow), the camera
- * locks to a first-person POV anchored to the actor: eye-height, looking
- * in the direction they're walking.
- *
- * Two pieces:
- *  1. <FollowButton> — billboarded sprite above the actor's head
- *  2. <FollowCamera> — useFrame controller that moves the THREE camera
- *     onto the actor every frame while following=true
- *
- * Both are gated on sim being running (or at least having a path). The
- * camera controller silently does nothing if following=false, so it's
- * cheap to always mount.
+ * Chase-camera controller for sim mode. The camera ORBITS around the
+ * walking subject from a comfortable distance, so the user can watch
+ * cameras detect / lock onto the subject as they move through the
+ * building. Auto-engages on sim mount (no button click required); the
+ * Exit Follow chip in the top-right lets users break out into free orbit.
  */
 export function ActorFollowController() {
-  return (
-    <>
-      <FollowButton />
-      <FollowCamera />
-    </>
-  );
+  return <FollowCamera />;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -72,95 +57,6 @@ function sampleActor(floor: ReturnType<typeof useActiveFloor>): {
 }
 
 /* -------------------------------------------------------------------------- */
-
-/**
- * Clickable badge floating above the actor's head. Reads as a Google-Maps
- * Pegman button but inverted — "drop into this character". Hides when the
- * camera is already following so the badge doesn't follow you everywhere.
- */
-function FollowButton() {
-  const floor = useActiveFloor();
-  const following = useSimStore((s) => s.following);
-  const startFollow = useSimStore((s) => s.startFollow);
-  const groupRef = useRef<THREE.Group>(null);
-
-  useFrame(() => {
-    if (!groupRef.current) return;
-    if (following) {
-      groupRef.current.visible = false;
-      return;
-    }
-    const s = sampleActor(floor);
-    if (!s) {
-      groupRef.current.visible = false;
-      return;
-    }
-    groupRef.current.visible = true;
-    // Float above the actor's head, with a subtle bob so the eye is drawn
-    // to it.
-    const t = useSimStore.getState().t;
-    const bob = Math.sin(t * 4) * 0.04;
-    groupRef.current.position.set(s.pos.x, 2.35 + bob, s.pos.z);
-  });
-
-  return (
-    <group ref={groupRef}>
-      <Billboard>
-        <group
-          onClick={(e) => {
-            e.stopPropagation();
-            startFollow();
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            document.body.style.cursor = "pointer";
-          }}
-          onPointerOut={() => {
-            document.body.style.cursor = "";
-          }}
-        >
-          {/* Soft halo so the badge pops from any orbit angle */}
-          <mesh position={[0, 0, -0.01]}>
-            <circleGeometry args={[0.5, 32]} />
-            <meshBasicMaterial color="#1e3a5f" transparent opacity={0.25} />
-          </mesh>
-          {/* Card */}
-          <mesh>
-            <planeGeometry args={[0.95, 0.34]} />
-            <meshBasicMaterial color="#0f172a" transparent opacity={0.94} />
-          </mesh>
-          {/* Cyan accent strip — left edge */}
-          <mesh position={[-0.42, 0, 0.001]}>
-            <planeGeometry args={[0.06, 0.34]} />
-            <meshBasicMaterial color="#22d3ee" />
-          </mesh>
-          {/* Eye icon — drawn as a small white circle since R3F doesn't
-              render lucide SVGs natively. Combined with the "Follow" text
-              it reads as a "view from here" affordance. */}
-          <mesh position={[-0.28, 0, 0.002]}>
-            <circleGeometry args={[0.055, 16]} />
-            <meshBasicMaterial color="#22d3ee" />
-          </mesh>
-          <Text
-            position={[0.08, 0, 0.003]}
-            fontSize={0.13}
-            color="#f8fafc"
-            anchorX="center"
-            anchorY="middle"
-            fillOpacity={1}
-          >
-            Follow
-          </Text>
-        </group>
-      </Billboard>
-    </group>
-  );
-}
-
-// Defensive: Eye is imported but unused in this file (we draw the icon as
-// a colored circle inside the canvas). Keeping the symbol referenced so
-// future iterations can swap in an actual SVG plane.
-void Eye;
 
 /* -------------------------------------------------------------------------- */
 
@@ -208,12 +104,15 @@ function FollowCamera() {
       }
       savedValid.current = true;
 
-      // Set up a chase-cam pose: place the camera 3.6m behind the actor
-      // (along their forward direction) and 2.6m up, target on the chest.
+      // Set up a chase-cam pose: place the camera well behind and above
+      // the actor so the user can see both the subject AND the
+      // surrounding cameras / sensors reacting to them. The previous
+      // (3.6m back / 2.6m up) chase was too close — you couldn't see
+      // the nearby cameras lighting up.
       const s = sampleActor(floor);
       if (s && orbit) {
-        const BEHIND = 3.6;
-        const HEIGHT = 2.6;
+        const BEHIND = 9.0;
+        const HEIGHT = 5.5;
         const ACTOR_LOOK_Y = 1.1;
         camera.position.set(
           s.pos.x - s.forward.x * BEHIND,
@@ -232,35 +131,150 @@ function FollowCamera() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [following]);
 
-  // While following, slide BOTH the camera position AND the orbit target
-  // by the actor's displacement each frame. The user's drag-to-orbit
-  // motion adjusts the angle/distance, but the relative offset between
-  // camera and target stays whatever the user has set.
-  const lastActorPos = useRef<THREE.Vector3 | null>(null);
-  useFrame(() => {
+  // Cinematic chase. Two phases:
+  //
+  //   1. INTRO — the very first sampleable frame we see, snapshot the
+  //      camera's current pose as start, compute the chase pose as end,
+  //      then over INTRO_SEC ease the camera through a cubic-out from
+  //      start → end. Reads like the opening shot of a movie.
+  //
+  //   2. FOLLOW — once intro completes, we hold a frame-rate-aware
+  //      exponential damping lerp toward (target = subject) for the
+  //      orbit target, and slide the camera position by the same delta.
+  //      Replaces the previous naive `delta * 0.85` which felt rigid.
+  //
+  // Both phases keep the relative camera→target offset that the user
+  // sets via drag-to-orbit, so they can re-frame mid-sim.
+  const introStartPos = useRef<THREE.Vector3 | null>(null);
+  const introStartTarget = useRef<THREE.Vector3 | null>(null);
+  const introEndPos = useRef<THREE.Vector3 | null>(null);
+  const introEndTarget = useRef<THREE.Vector3 | null>(null);
+  const introStartedAt = useRef<number | null>(null);
+  const snapped = useRef(false);
+  const dampedTarget = useRef<THREE.Vector3 | null>(null);
+  const INTRO_SEC = 1.2;
+  const BEHIND = 9.0;
+  const HEIGHT = 5.5;
+  const ACTOR_LOOK_Y = 1.1;
+
+  // Ease-out cubic — fast at the start, settles into the chase pose.
+  function easeOutCubic(t: number) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  // Cutaway state — read inside useFrame for fresh values per frame.
+  // (Subscribing to the store would re-render this whole component every
+  // tick which we want to avoid in a per-frame controller.)
+  const CUTAWAY_DURATION_SEC = 1.4;
+
+  useFrame((_, delta) => {
     if (!following || !orbit) return;
     const s = sampleActor(floor);
     if (!s) return;
-    const ACTOR_LOOK_Y = 1.1;
-    const desired = new THREE.Vector3(s.pos.x, ACTOR_LOOK_Y, s.pos.z);
-    if (lastActorPos.current === null) {
-      lastActorPos.current = desired.clone();
+    const desiredTarget = new THREE.Vector3(s.pos.x, ACTOR_LOOK_Y, s.pos.z);
+
+    // ── Cinematic cutaway ─────────────────────────────────────────────
+    // While a cutaway is active, hijack the camera to render through the
+    // cutaway camera's POV. When the cut expires, snap the chase camera
+    // back into its chase pose at the actor's current position so the
+    // return-to-chase reads as a clean cut, not a wild swing.
+    const cutawayCamId = useSimStore.getState().cutawayCamId;
+    const cutawayStartedAt = useSimStore.getState().cutawayStartedAt;
+    if (cutawayCamId && cutawayStartedAt !== null && floor) {
+      const elapsed = (performance.now() - cutawayStartedAt) / 1000;
+      if (elapsed < CUTAWAY_DURATION_SEC) {
+        const cam = floor.devices.find(
+          (d) => d.id === cutawayCamId && d.type === "camera",
+        );
+        if (cam) {
+          // Position virtual camera at the security camera's lens.
+          const cx = cam.position.x / floor.scale;
+          const cz = cam.position.y / floor.scale;
+          const cy = cam.mountHeight;
+          camera.position.set(cx, cy, cz);
+          // Aim at the subject's chest — surveillance feed style.
+          orbit.target.set(s.pos.x, ACTOR_LOOK_Y, s.pos.z);
+          orbit.update();
+          return; // skip normal chase this frame
+        }
+      } else {
+        // Cut is up — clear the state and re-snap chase to current actor
+        // pose. Reset dampedTarget so the follow lerp restarts cleanly.
+        useSimStore.getState().endCutaway();
+        camera.position.set(
+          s.pos.x - s.forward.x * BEHIND,
+          HEIGHT,
+          s.pos.z - s.forward.z * BEHIND,
+        );
+        orbit.target.set(s.pos.x, ACTOR_LOOK_Y, s.pos.z);
+        orbit.update();
+        dampedTarget.current = desiredTarget.clone();
+        return;
+      }
+    }
+
+    // First sampleable frame — set up the intro.
+    if (!snapped.current) {
+      introStartPos.current = camera.position.clone();
+      introStartTarget.current = orbit.target.clone();
+      introEndPos.current = new THREE.Vector3(
+        s.pos.x - s.forward.x * BEHIND,
+        HEIGHT,
+        s.pos.z - s.forward.z * BEHIND,
+      );
+      introEndTarget.current = desiredTarget.clone();
+      introStartedAt.current = performance.now();
+      snapped.current = true;
       return;
     }
-    const delta = desired.clone().sub(lastActorPos.current);
-    // Smooth the per-frame delta a bit so micro-jitter on tight corners
-    // doesn't translate into camera shake.
-    delta.multiplyScalar(0.85);
-    camera.position.add(delta);
-    orbit.target.add(delta);
+
+    // INTRO phase — ease camera + target from start → end pose.
+    if (introStartedAt.current !== null) {
+      const elapsed = (performance.now() - introStartedAt.current) / 1000;
+      const k = Math.min(1, elapsed / INTRO_SEC);
+      const e = easeOutCubic(k);
+      // End-of-intro pose adjusts continuously to the moving subject so the
+      // landing pose still feels chase-correct even at intro end.
+      const liveEndPos = new THREE.Vector3(
+        s.pos.x - s.forward.x * BEHIND,
+        HEIGHT,
+        s.pos.z - s.forward.z * BEHIND,
+      );
+      camera.position.lerpVectors(introStartPos.current!, liveEndPos, e);
+      orbit.target.lerpVectors(introStartTarget.current!, desiredTarget, e);
+      orbit.update();
+      if (k >= 1) {
+        introStartedAt.current = null;
+        dampedTarget.current = desiredTarget.clone();
+      }
+      return;
+    }
+
+    // FOLLOW phase — exponential damping lerp (frame-rate aware). The
+    // higher the damping coefficient, the snappier; lower = more drift.
+    if (!dampedTarget.current) {
+      dampedTarget.current = desiredTarget.clone();
+    }
+    const damping = 4.5; // ~halflife ≈ 150ms
+    const alpha = 1 - Math.exp(-damping * delta);
+    const newTarget = dampedTarget.current
+      .clone()
+      .lerp(desiredTarget, alpha);
+    const moveDelta = newTarget.clone().sub(dampedTarget.current);
+    camera.position.add(moveDelta);
+    orbit.target.add(moveDelta);
     orbit.update();
-    lastActorPos.current.copy(desired);
+    dampedTarget.current.copy(newTarget);
   });
 
-  // Forget the cached actor position when follow toggles off so the next
-  // session starts fresh.
+  // Forget all cached chase state when follow toggles off so the next
+  // session starts with a fresh cinematic intro.
   useEffect(() => {
-    if (!following) lastActorPos.current = null;
+    if (!following) {
+      snapped.current = false;
+      introStartedAt.current = null;
+      dampedTarget.current = null;
+    }
   }, [following]);
 
   return null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { PanelLeftOpen, PanelRightOpen } from "lucide-react";
 import { useDesignStore } from "@/lib/store";
@@ -102,6 +102,11 @@ export function EditorShell({ designId }: { designId: string }) {
   // your layout between sessions.
   const [libraryCollapsed, setLibraryCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  // Track whether a sidebar is mid-collapse so we only animate the width
+  // for collapse/expand — never while the user is actively dragging the
+  // ResizeHandle (where transitions would feel laggy).
+  const [animatingLeft, setAnimatingLeft] = useState(false);
+  const [animatingRight, setAnimatingRight] = useState(false);
   // Hydrate from localStorage after mount to avoid SSR/CSR mismatch.
   useEffect(() => {
     const w = loadWidths();
@@ -111,7 +116,10 @@ export function EditorShell({ designId }: { designId: string }) {
     setLibraryCollapsed(c.library);
     setRightCollapsed(c.right);
   }, []);
-  // Persist on change.
+  // Persist on change — BUT skip while in sim mode, since the sidebars
+  // are auto-collapsed below and we don't want to pollute the user's
+  // saved layout. They expect to return from sim with the same
+  // arrangement they had before they entered it.
   useEffect(() => {
     if (typeof window === "undefined") return;
     localStorage.setItem("dv-library-width", String(libraryWidth));
@@ -122,12 +130,61 @@ export function EditorShell({ designId }: { designId: string }) {
   }, [rightWidth]);
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (mode === "sim") return;
     localStorage.setItem("dv-library-collapsed", libraryCollapsed ? "1" : "0");
-  }, [libraryCollapsed]);
+  }, [libraryCollapsed, mode]);
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (mode === "sim") return;
     localStorage.setItem("dv-right-collapsed", rightCollapsed ? "1" : "0");
-  }, [rightCollapsed]);
+  }, [rightCollapsed, mode]);
+
+  // Trigger the width transition only for collapse/expand. Turning the
+  // CSS transition off again once the animation finishes means the
+  // ResizeHandle drag stays buttery (every pointermove frame applies
+  // instantly instead of easing toward the new width).
+  function toggleLeft(next: boolean) {
+    setAnimatingLeft(true);
+    setLibraryCollapsed(next);
+    window.setTimeout(() => setAnimatingLeft(false), 260);
+  }
+  function toggleRight(next: boolean) {
+    setAnimatingRight(true);
+    setRightCollapsed(next);
+    window.setTimeout(() => setAnimatingRight(false), 260);
+  }
+
+  // Auto-collapse both sidebars when the user enters Sim mode so the
+  // cinematic scene fills the canvas, then restore their prior
+  // arrangement when they leave. We snapshot the pre-sim state in refs
+  // so the restore is exact (not "best guess").
+  const preSimLeftRef = useRef<boolean | null>(null);
+  const preSimRightRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!hydrated) return;
+    if (mode === "sim") {
+      // Entering sim — snapshot, then force-collapse if needed.
+      if (preSimLeftRef.current === null) {
+        preSimLeftRef.current = libraryCollapsed;
+        preSimRightRef.current = rightCollapsed;
+      }
+      if (!libraryCollapsed) toggleLeft(true);
+      if (!rightCollapsed) toggleRight(true);
+    } else {
+      // Leaving sim — restore prior state (if we have a snapshot).
+      if (preSimLeftRef.current !== null) {
+        if (libraryCollapsed !== preSimLeftRef.current) {
+          toggleLeft(preSimLeftRef.current);
+        }
+        if (rightCollapsed !== preSimRightRef.current) {
+          toggleRight(preSimRightRef.current!);
+        }
+        preSimLeftRef.current = null;
+        preSimRightRef.current = null;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -159,17 +216,22 @@ export function EditorShell({ designId }: { designId: string }) {
       <TopBar />
       <div className="flex flex-1 min-h-0">
         <div
-          style={{ width: libraryCollapsed ? RAIL_WIDTH : libraryWidth }}
-          className="shrink-0"
+          style={{
+            width: libraryCollapsed ? RAIL_WIDTH : libraryWidth,
+            transition: animatingLeft
+              ? "width 240ms cubic-bezier(0.4, 0, 0.2, 1)"
+              : undefined,
+          }}
+          className="relative shrink-0 overflow-hidden"
         >
           {libraryCollapsed ? (
             <CollapsedRail
               side="left"
               label="Show library"
-              onExpand={() => setLibraryCollapsed(false)}
+              onExpand={() => toggleLeft(false)}
             />
           ) : (
-            <LibraryPanel onCollapse={() => setLibraryCollapsed(true)} />
+            <LibraryPanel onCollapse={() => toggleLeft(true)} />
           )}
         </div>
         {!libraryCollapsed && (
@@ -207,17 +269,22 @@ export function EditorShell({ designId }: { designId: string }) {
           />
         )}
         <div
-          style={{ width: rightCollapsed ? RAIL_WIDTH : rightWidth }}
-          className="shrink-0"
+          style={{
+            width: rightCollapsed ? RAIL_WIDTH : rightWidth,
+            transition: animatingRight
+              ? "width 240ms cubic-bezier(0.4, 0, 0.2, 1)"
+              : undefined,
+          }}
+          className="relative shrink-0 overflow-hidden"
         >
           {rightCollapsed ? (
             <CollapsedRail
               side="right"
               label="Show properties / AI"
-              onExpand={() => setRightCollapsed(false)}
+              onExpand={() => toggleRight(false)}
             />
           ) : (
-            <RightSidebar onCollapse={() => setRightCollapsed(true)} />
+            <RightSidebar onCollapse={() => toggleRight(true)} />
           )}
         </div>
       </div>

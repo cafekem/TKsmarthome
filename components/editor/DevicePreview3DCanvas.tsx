@@ -441,11 +441,13 @@ export function DevicePreview3DCanvas({ kind }: { kind: PreviewKind }) {
     <div style={{ position: "absolute", inset: 0 }}>
       <Canvas
         dpr={[1, 1.8]}
+        // Wide frustum so no rotation angle can ever push a corner of the
+        // device past the near or far plane and get clipped mid-spin.
         camera={{
           position: layout.cameraPos,
           fov: layout.fov,
-          near: 0.1,
-          far: 10,
+          near: 0.01,
+          far: 100,
         }}
         // alpha:true → transparent canvas so the device floats on whatever
         // panel surface it lives on
@@ -485,7 +487,12 @@ export function DevicePreview3DCanvas({ kind }: { kind: PreviewKind }) {
       <hemisphereLight args={["#ffffff", "#d4d4d8", 0.45]} />
 
         <Rotator initialYaw={layout.initialYaw} speed={0.28}>
-          <group scale={layout.scale}>
+          {/* Each LAYOUT.scale is hand-tuned for the device front-on. When
+              the device spins, its diagonal extent is up to ~1.4× larger,
+              so we shrink everything by a constant ROTATION_HEADROOM
+              factor — guarantees no corner ever swings past the canvas
+              edge mid-rotation. */}
+          <group scale={layout.scale * 0.78}>
             <LightenHousings>
               <DeviceMesh
                 device={device}

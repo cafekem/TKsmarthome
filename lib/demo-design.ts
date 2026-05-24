@@ -549,6 +549,13 @@ function demoDevices(): Device[] {
  */
 function demoSimPath() {
   return [
+    // ── Approach (outside the building) ───────────────────────────
+    // The threat starts on the sidewalk south of the front entry and
+    // walks in through the door — so the cameras / sensors see them
+    // ARRIVE, not appear mid-lobby. (Pre-scale coords; buildDemoFloor
+    // multiplies them by SCALE_MUL like every other point.)
+    { x: 280, y: 1240 }, // Outside, ~3m south of the south outer wall
+    { x: 280, y: 1140 }, // At the entry threshold, about to walk in
     { x: 280, y: 1060 }, // Just inside the entry, in the vestibule
     { x: 280, y: 960 },  // Through the vestibule into the lobby
     { x: 320, y: 800 },  // Reception, walking north
@@ -814,8 +821,162 @@ function demoFurniture(): import("@/types/design").FurnitureItem[] {
       widthM: 0.3,
       label: "Lounge Library",
     }),
+
+    // ────────────── WALL DRESSING — paintings, windows, vending,
+    // outlets. All flush against walls so they read as "mounted" not
+    // "floating". Rotation convention: 0 = mounted on a NORTH wall,
+    // facing south into the room. π = south wall facing north. π/2 =
+    // EAST wall facing west. -π/2 = WEST wall facing east.
+    // (Sized via FURNITURE_DEFAULTS so we don't hand-tune every entry.)
+
+    // ── Paintings (4) ────────────────────────────────────────────
+    mk({
+      type: "painting",
+      position: { x: 220, y: 12 }, // conference north wall, over the table
+      rotation: 0,
+      lengthM: 0.9,
+      widthM: 0.05,
+      label: "Conference art",
+    }),
+    mk({
+      type: "painting",
+      position: { x: 12, y: 850 }, // reception west wall — over the sofa
+      rotation: -Math.PI / 2,
+      lengthM: 0.9,
+      widthM: 0.05,
+      label: "Lobby art",
+    }),
+    mk({
+      type: "painting",
+      position: { x: 550, y: 12 }, // open office north wall
+      rotation: 0,
+      lengthM: 0.9,
+      widthM: 0.05,
+      label: "Open-office art",
+    }),
+    mk({
+      type: "painting",
+      position: { x: 1450, y: 1088 }, // lounge south wall, facing north
+      rotation: Math.PI,
+      lengthM: 0.9,
+      widthM: 0.05,
+      label: "Lounge art",
+    }),
+
+    // ── Vending machines (2) ─────────────────────────────────────
+    mk({
+      type: "vending-machine",
+      position: { x: 1120, y: 32 }, // open office, back to north outer wall
+      rotation: 0,
+      lengthM: 0.9,
+      widthM: 0.8,
+      label: "Snack vending",
+    }),
+    mk({
+      type: "vending-machine",
+      position: { x: 1280, y: 332 }, // lounge, back to north wall (the lounge/server divider)
+      rotation: 0,
+      lengthM: 0.9,
+      widthM: 0.8,
+      label: "Drinks vending",
+    }),
+
+    // ── Outlets (6) — sprinkled along walls in different rooms ───
+    mk({
+      type: "outlet",
+      position: { x: 8, y: 80 }, // conference west outer wall
+      rotation: -Math.PI / 2,
+      lengthM: 0.12,
+      widthM: 0.03,
+      label: "Outlet",
+    }),
+    mk({
+      type: "outlet",
+      position: { x: 8, y: 230 }, // conference west outer wall (second)
+      rotation: -Math.PI / 2,
+      lengthM: 0.12,
+      widthM: 0.03,
+      label: "Outlet",
+    }),
+    mk({
+      type: "outlet",
+      position: { x: 600, y: 1093 }, // open office south outer wall
+      rotation: Math.PI,
+      lengthM: 0.12,
+      widthM: 0.03,
+      label: "Outlet",
+    }),
+    mk({
+      type: "outlet",
+      position: { x: 1000, y: 8 }, // open office north outer wall
+      rotation: 0,
+      lengthM: 0.12,
+      widthM: 0.03,
+      label: "Outlet",
+    }),
+    mk({
+      type: "outlet",
+      position: { x: 1592, y: 700 }, // lounge east outer wall
+      rotation: Math.PI / 2,
+      lengthM: 0.12,
+      widthM: 0.03,
+      label: "Outlet",
+    }),
+    mk({
+      type: "outlet",
+      position: { x: 1208, y: 800 }, // lounge west interior wall (server-side back)
+      rotation: -Math.PI / 2,
+      lengthM: 0.12,
+      widthM: 0.03,
+      label: "Outlet",
+    }),
+    // Extra outlets at standard height (0.30m above floor) in rooms
+    // that didn't have one yet.
+    mk({
+      type: "outlet",
+      position: { x: 672, y: 600 }, // kitchen bar east wall (x=680, interior)
+      rotation: Math.PI / 2,
+      lengthM: 0.12,
+      widthM: 0.03,
+      label: "Outlet",
+    }),
+    mk({
+      type: "outlet",
+      position: { x: 60, y: 492 }, // break room south wall (y=500, interior)
+      rotation: Math.PI,
+      lengthM: 0.12,
+      widthM: 0.03,
+      label: "Outlet",
+    }),
+    mk({
+      type: "outlet",
+      position: { x: 1560, y: 292 }, // server room south wall (y=300, lounge-side back)
+      rotation: Math.PI,
+      lengthM: 0.12,
+      widthM: 0.03,
+      label: "Outlet",
+    }),
   ];
 }
+
+/**
+ * Uniformly enlarge every pixel coordinate by SCALE_MUL. Walls grow, doors
+ * stay snapped to walls, devices/furniture stay in their rooms, sim-path
+ * still threads every door. Physical dimensions stored in meters
+ * (lengthM/widthM, rangeMeters, widthMeters on doors) stay unchanged — so
+ * the same desks, cameras and door swings now occupy a larger building.
+ *
+ * 1.45× takes the building from 32 × 22 m to ~46 × 32 m and bumps the
+ * smallest room (break room, 4 × 4 m) up to ~5.8 × 5.8 m. Big enough to
+ * feel like real offices, still proportionate.
+ */
+const SCALE_MUL = 1.45;
+const sx = (n: number) => Math.round(n * SCALE_MUL);
+const sxy = <T extends { x: number; y: number }>(p: T): T => ({
+  ...p,
+  x: sx(p.x),
+  y: sx(p.y),
+});
 
 export function buildDemoFloor(): Omit<Floor, "id" | "index"> {
   return {
@@ -825,11 +986,18 @@ export function buildDemoFloor(): Omit<Floor, "id" | "index"> {
     planImage: null,
     scale: 50,
     ceilingHeight: 3.0,
-    walls: demoWalls(),
-    devices: demoDevices(),
-    doors: demoDoors(),
+    walls: demoWalls().map((w) => ({
+      ...w,
+      start: sxy(w.start),
+      end: sxy(w.end),
+    })),
+    devices: demoDevices().map((d) => ({ ...d, position: sxy(d.position) })),
+    doors: demoDoors().map((d) => ({ ...d, position: sxy(d.position) })),
     annotations: [],
-    furniture: demoFurniture(),
-    simPath: demoSimPath(),
+    furniture: demoFurniture().map((f) => ({
+      ...f,
+      position: sxy(f.position),
+    })),
+    simPath: demoSimPath().map(sxy),
   };
 }

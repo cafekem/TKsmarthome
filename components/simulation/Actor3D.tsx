@@ -16,32 +16,28 @@ import {
 } from "@/lib/walk";
 
 /**
- * The simulation "subject" walking through the building.
- * Visually matches PegmanCharacter — same palette + proportions — but
- * keeps its own copy of the geometry inline so the animation refs into
- * limbs/body/head stay simple. If you change palette/proportions, update
- * both this file and PegmanCharacter.tsx.
+ * The simulation "subject" walking through the building — styled as an
+ * intruder so the threat reads visually: dark hooded clothes, balaclava,
+ * crowbar in the right hand. (Earlier iterations used a friendly orange-
+ * capped pegman, which looked like a delivery driver rather than someone
+ * a security system should be reacting to.)
+ *
+ * If you change palette/proportions, the Pegman thumbnail (for the
+ * drop-onto-scene affordance) stays its old friendly look — only the
+ * walking subject in sim mode is the intruder.
  */
 
-const PLAYER_BODY_HUE = "#F5E9D0";
-const PLAYER_CAP_HUE = "#F97316";
-const PLAYER_SHIRT_HUE = "#0891B2";
-const PLAYER_PANTS_HUE = "#1E3A5F";
-const OUTLINE_COLOR = "#0E5E73";
+const PLAYER_BODY_HUE = "#1a1a1f"; // mask base (charcoal/near-black)
+const PLAYER_SHIRT_HUE = "#0f1115"; // hoodie (very dark)
+const PLAYER_PANTS_HUE = "#0a0c10"; // pants (off-black)
+const PLAYER_HAND_HUE = "#15171c"; // gloves (dark, slight contrast w/ shirt)
+const PLAYER_SKIN_EYES = "#e2c9a6"; // tiny skin slit visible through balaclava
+const OUTLINE_COLOR = "#000000";
 
-function makePalette(hue: string) {
-  const base = new THREE.Color(hue);
-  const hsl = { h: 0, s: 0, l: 0 };
-  base.getHSL(hsl);
-  const head = new THREE.Color().setHSL(
-    hsl.h,
-    Math.min(0.4, hsl.s),
-    Math.min(0.7, hsl.l + 0.22)
-  );
-  const hand = new THREE.Color().setHSL(hsl.h, 0.18, 0.86);
+function makePalette() {
   return {
-    head: head.getStyle(),
-    hand: hand.getStyle(),
+    head: PLAYER_BODY_HUE, // balaclava body
+    hand: PLAYER_HAND_HUE, // gloves
   };
 }
 
@@ -58,7 +54,7 @@ export function Actor3D() {
   const lastPos = useRef(new THREE.Vector3());
   const lastYaw = useRef(0);
 
-  const palette = useMemo(() => makePalette(PLAYER_BODY_HUE), []);
+  const palette = useMemo(() => makePalette(), []);
 
   // Detection state for the outline color — subscribed so React re-renders
   // and the Outlines components get fresh props when lock state changes.
@@ -76,6 +72,7 @@ export function Actor3D() {
   const footprintRef = useRef<THREE.MeshBasicMaterial>(null);
   const auraRef = useRef<THREE.MeshBasicMaterial>(null);
   const auraMeshRef = useRef<THREE.Mesh>(null);
+
 
   useFrame(({ clock }, delta) => {
     if (!floor || !group.current) return;
@@ -122,7 +119,7 @@ export function Actor3D() {
       if (armLRef.current) armLRef.current.rotation.x = -swing * 0.8;
       if (armRRef.current) armRRef.current.rotation.x = swing * 0.8;
       if (bodyRef.current)
-        bodyRef.current.position.y = 0.47 + phase(tt, 0) * BOB_AMPLITUDE;
+        bodyRef.current.position.y = 1.125 + phase(tt, 0) * BOB_AMPLITUDE;
     } else {
       const breathe = Math.sin(tt * 1.4) * 0.012;
       if (legLRef.current)
@@ -153,7 +150,7 @@ export function Actor3D() {
           8,
           dt
         );
-      if (bodyRef.current) bodyRef.current.position.y = 0.47 + breathe;
+      if (bodyRef.current) bodyRef.current.position.y = 1.125 + breathe;
     }
     if (headRef.current) {
       headRef.current.rotation.y = THREE.MathUtils.damp(
@@ -174,9 +171,11 @@ export function Actor3D() {
     const auraMesh = auraMeshRef.current;
     if (footprintMat && auraMat && auraMesh) {
       if (!running || detectCount === 0) {
-        footprintMat.color.set(PLAYER_SHIRT_HUE);
-        footprintMat.opacity = 0.45;
-        auraMat.color.set("#0891B2");
+        // Idle subject — no footprint highlight, no aura. Lets the
+        // intruder visually blend in until a camera actually fires.
+        footprintMat.color.set("#1f2937");
+        footprintMat.opacity = 0;
+        auraMat.color.set("#1f2937");
         auraMat.opacity = 0;
         auraMesh.scale.setScalar(1);
       } else if (detectCount === 1) {
@@ -195,6 +194,7 @@ export function Actor3D() {
         auraMesh.scale.setScalar(1.1 + pulse * 0.18);
       }
     }
+
   });
 
   return (
@@ -207,7 +207,7 @@ export function Actor3D() {
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, 0.01, 0]}
       >
-        <ringGeometry args={[0.48, 0.85, 48]} />
+        <ringGeometry args={[0.30, 0.60, 48]} />
         <meshBasicMaterial
           ref={auraRef}
           color="#0891B2"
@@ -216,10 +216,11 @@ export function Actor3D() {
           depthWrite={false}
         />
       </mesh>
-      {/* Inner footprint — the always-on subject locator. Color recolored
-          every frame by the useFrame callback above. */}
+      {/* Inner footprint — the always-on subject locator. Smaller now that
+          the threat is properly human-scaled (door is 2.05m, threat is
+          ~1.70m). Color recolored every frame by useFrame below. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
-        <ringGeometry args={[0.34, 0.46, 40]} />
+        <ringGeometry args={[0.22, 0.32, 40]} />
         <meshBasicMaterial
           ref={footprintRef}
           color={PLAYER_SHIRT_HUE}
@@ -229,13 +230,14 @@ export function Actor3D() {
         />
       </mesh>
 
-      {/* Legs */}
-      <group ref={legLRef} position={[-0.11, 0.22, 0]}>
+      {/* Legs — hip at y=0.85, feet just above the floor. 80cm long so
+          the leg-to-torso ratio reads as adult-human, not stubby. */}
+      <group ref={legLRef} position={[-0.09, 0.85, 0]}>
         <RoundedBox
-          args={[0.15, 0.22, 0.2]}
-          radius={0.038}
+          args={[0.13, 0.80, 0.18]}
+          radius={0.035}
           smoothness={4}
-          position={[0, -0.11, 0]}
+          position={[0, -0.40, 0]}
           castShadow
         >
           <meshStandardMaterial color={PLAYER_PANTS_HUE} roughness={0.82} />
@@ -247,12 +249,12 @@ export function Actor3D() {
           />
         </RoundedBox>
       </group>
-      <group ref={legRRef} position={[0.11, 0.22, 0]}>
+      <group ref={legRRef} position={[0.09, 0.85, 0]}>
         <RoundedBox
-          args={[0.15, 0.22, 0.2]}
-          radius={0.038}
+          args={[0.13, 0.80, 0.18]}
+          radius={0.035}
           smoothness={4}
-          position={[0, -0.11, 0]}
+          position={[0, -0.40, 0]}
           castShadow
         >
           <meshStandardMaterial color={PLAYER_PANTS_HUE} roughness={0.82} />
@@ -265,9 +267,11 @@ export function Actor3D() {
         </RoundedBox>
       </group>
 
-      {/* Body */}
-      <group ref={bodyRef} position={[0, 0.47, 0]}>
-        <RoundedBox args={[0.44, 0.52, 0.36]} radius={0.07} smoothness={5} castShadow>
+      {/* Body / torso — bottom at hip (y=0.85), top at shoulder (y=1.40).
+          Much slimmer in depth than before (was 0.36m deep, now 0.22m)
+          so the threat doesn't read like a refrigerator with arms. */}
+      <group ref={bodyRef} position={[0, 1.125, 0]}>
+        <RoundedBox args={[0.36, 0.55, 0.22]} radius={0.05} smoothness={5} castShadow>
           <meshStandardMaterial color={PLAYER_SHIRT_HUE} roughness={0.62} />
           <Outlines
             thickness={outline.thickness}
@@ -276,78 +280,88 @@ export function Actor3D() {
             transparent
           />
         </RoundedBox>
-        {/* Belt strip */}
-        <mesh position={[0, 0.22, 0.184]}>
-          <planeGeometry args={[0.32, 0.05]} />
+        {/* Belt strip — sits at the waist, on the torso's front face. */}
+        <mesh position={[0, -0.18, 0.112]}>
+          <planeGeometry args={[0.30, 0.045]} />
           <meshBasicMaterial color={PLAYER_BODY_HUE} transparent opacity={0.95} />
         </mesh>
 
-        {/* Left arm */}
-        <group ref={armLRef} position={[-0.25, 0.2, 0]}>
+        {/* Left arm — shoulder at top-edge of torso. 70cm total length
+            (30 upper + 28 forearm + 12 hand). */}
+        <group ref={armLRef} position={[-0.21, 0.245, 0]}>
           <RoundedBox
-            args={[0.13, 0.18, 0.15]}
-            radius={0.04}
+            args={[0.10, 0.30, 0.12]}
+            radius={0.035}
             smoothness={4}
-            position={[0, -0.09, 0]}
+            position={[0, -0.15, 0]}
             castShadow
           >
             <meshStandardMaterial color={PLAYER_SHIRT_HUE} roughness={0.65} />
           </RoundedBox>
           <RoundedBox
-            args={[0.13, 0.22, 0.15]}
-            radius={0.04}
+            args={[0.10, 0.28, 0.12]}
+            radius={0.035}
             smoothness={4}
-            position={[0, -0.29, 0]}
+            position={[0, -0.44, 0]}
             castShadow
           >
             <meshStandardMaterial color={palette.hand} roughness={0.7} />
           </RoundedBox>
           <RoundedBox
-            args={[0.12, 0.12, 0.13]}
-            radius={0.036}
+            args={[0.10, 0.12, 0.10]}
+            radius={0.032}
             smoothness={4}
-            position={[0, -0.46, 0]}
+            position={[0, -0.64, 0]}
             castShadow
           >
             <meshStandardMaterial color={palette.hand} roughness={0.7} />
           </RoundedBox>
         </group>
 
-        {/* Right arm */}
-        <group ref={armRRef} position={[0.25, 0.2, 0]}>
+        {/* Right arm — gripping the crowbar. Forearm tilted forward by
+            the crowbar group's rotation below so the bar hangs at a
+            believable carrying angle instead of sticking straight down. */}
+        <group ref={armRRef} position={[0.21, 0.245, 0]}>
+          {/* Upper arm */}
           <RoundedBox
-            args={[0.13, 0.18, 0.15]}
-            radius={0.04}
+            args={[0.10, 0.30, 0.12]}
+            radius={0.035}
             smoothness={4}
-            position={[0, -0.09, 0]}
+            position={[0, -0.15, 0]}
             castShadow
           >
             <meshStandardMaterial color={PLAYER_SHIRT_HUE} roughness={0.65} />
           </RoundedBox>
+          {/* Forearm */}
           <RoundedBox
-            args={[0.13, 0.22, 0.15]}
-            radius={0.04}
+            args={[0.10, 0.28, 0.12]}
+            radius={0.035}
             smoothness={4}
-            position={[0, -0.29, 0]}
+            position={[0, -0.44, 0]}
             castShadow
           >
             <meshStandardMaterial color={palette.hand} roughness={0.7} />
           </RoundedBox>
+          {/* Hand (glove) */}
           <RoundedBox
-            args={[0.12, 0.12, 0.13]}
-            radius={0.036}
+            args={[0.10, 0.12, 0.10]}
+            radius={0.032}
             smoothness={4}
-            position={[0, -0.46, 0]}
+            position={[0, -0.64, 0]}
             castShadow
           >
             <meshStandardMaterial color={palette.hand} roughness={0.7} />
           </RoundedBox>
         </group>
 
-        {/* Head */}
-        <group ref={headRef} position={[0, 0.55, 0]}>
-          <RoundedBox args={[0.62, 0.58, 0.5]} radius={0.13} smoothness={5} castShadow>
-            <meshStandardMaterial color={palette.head} roughness={0.6} />
+        {/* Head — balaclava sized for a real adult skull (~20cm wide,
+            ~24cm tall). Was previously a 62cm cube that looked like a
+            cartoon character; the slim version reads as actually-human
+            and stays a believable fraction of the door height (2.05m). */}
+        <group ref={headRef} position={[0, 0.41, 0]}>
+          {/* Hood / balaclava base */}
+          <RoundedBox args={[0.20, 0.24, 0.20]} radius={0.06} smoothness={5} castShadow>
+            <meshStandardMaterial color={palette.head} roughness={0.78} />
             <Outlines
               thickness={outline.thickness}
               color={outline.color}
@@ -355,30 +369,26 @@ export function Actor3D() {
               transparent
             />
           </RoundedBox>
-          {/* Cap crown */}
-          <mesh position={[0, 0.34, 0.04]}>
-            <cylinderGeometry args={[0.34, 0.36, 0.16, 24]} />
-            <meshStandardMaterial color={PLAYER_CAP_HUE} roughness={0.55} />
+          {/* Mask eye-slit — thin horizontal strip of skin visible across
+              the eyes. Sits just proud of the hood face to avoid z-fighting. */}
+          <mesh position={[0, 0.015, 0.103]}>
+            <planeGeometry args={[0.14, 0.04]} />
+            <meshStandardMaterial color={PLAYER_SKIN_EYES} roughness={0.55} />
           </mesh>
-          {/* Cap visor */}
-          <RoundedBox
-            args={[0.54, 0.045, 0.3]}
-            radius={0.035}
-            smoothness={4}
-            position={[0, 0.27, 0.38]}
-            rotation={[0.03, 0, 0]}
-            castShadow
-          >
-            <meshStandardMaterial color={PLAYER_CAP_HUE} roughness={0.55} />
-          </RoundedBox>
-          {/* Eyes */}
-          <mesh position={[-0.13, 0.05, 0.27]}>
-            <sphereGeometry args={[0.04, 12, 12]} />
-            <meshStandardMaterial color="#101827" roughness={0.4} />
+          {/* Eyes inside the slit */}
+          <mesh position={[-0.035, 0.015, 0.105]}>
+            <sphereGeometry args={[0.013, 12, 12]} />
+            <meshStandardMaterial color="#0a0a0a" roughness={0.3} />
           </mesh>
-          <mesh position={[0.13, 0.05, 0.27]}>
-            <sphereGeometry args={[0.04, 12, 12]} />
-            <meshStandardMaterial color="#101827" roughness={0.4} />
+          <mesh position={[0.035, 0.015, 0.105]}>
+            <sphereGeometry args={[0.013, 12, 12]} />
+            <meshStandardMaterial color="#0a0a0a" roughness={0.3} />
+          </mesh>
+          {/* Hood seam down the top of the head — small ridge for
+              definition so the head doesn't read as a flat block. */}
+          <mesh position={[0, 0.115, 0.01]}>
+            <boxGeometry args={[0.02, 0.02, 0.18]} />
+            <meshStandardMaterial color="#0a0a0c" roughness={0.85} />
           </mesh>
         </group>
       </group>

@@ -345,6 +345,13 @@ export interface Annotation {
  *  - "brick":    exposed running-bond brick with mortar lines */
 export type WallStyle = "plain" | "painted" | "concrete" | "brick";
 
+/** Visual style applied to the floor surface in the 3D scene.
+ *  - "wood":     light-oak plank floor — the default original look
+ *  - "tile":     polished ceramic tile grid with grout lines
+ *  - "concrete": polished concrete with aggregate flecks
+ *  - "carpet":   short commercial loop carpet */
+export type FloorStyle = "wood" | "tile" | "concrete" | "carpet";
+
 /**
  * Furniture placed on the floor. Pure visualization — never appears in
  * the BoM, quote, or security analysis. Each piece has a real-world
@@ -361,7 +368,14 @@ export type FurnitureType =
   | "refrigerator"
   | "bed"
   | "bookshelf"
-  | "tv-display";
+  | "tv-display"
+  // Wall-mounted dressing — purely decorative, never appears in the BoM.
+  // Windows render the same in day + dusk so the building stops looking
+  // like a hermetic box when the sun isn't setting.
+  | "painting"
+  | "window"
+  | "vending-machine"
+  | "outlet";
 
 export interface FurnitureItem {
   id: string;
@@ -388,6 +402,8 @@ export interface Floor {
   ceilingHeight: number;
   /** Visual style for walls in the 3D scene. Defaults to "plain". */
   wallStyle?: WallStyle;
+  /** Visual style for the floor surface in the 3D scene. Defaults to "wood". */
+  floorStyle?: FloorStyle;
   walls: Wall[];
   devices: Device[];
   /** Doors placed on walls. Readers can link to specific doors by id. */
@@ -421,6 +437,12 @@ export const FURNITURE_DEFAULTS: Record<
   bed: { lengthM: 2.0, widthM: 1.5, label: "Bed" },
   bookshelf: { lengthM: 1.0, widthM: 0.35, label: "Bookshelf" },
   "tv-display": { lengthM: 1.4, widthM: 0.1, label: "TV / Display" },
+  // Wall-mounted dressing — width is the depth from the wall surface,
+  // length is how wide the piece appears along the wall.
+  painting: { lengthM: 0.9, widthM: 0.05, label: "Painting" },
+  window: { lengthM: 1.4, widthM: 0.08, label: "Window" },
+  "vending-machine": { lengthM: 0.9, widthM: 0.8, label: "Vending machine" },
+  outlet: { lengthM: 0.12, widthM: 0.03, label: "Outlet" },
 };
 
 export interface DesignDocument {

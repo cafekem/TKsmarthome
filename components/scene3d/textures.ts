@@ -24,6 +24,12 @@ import * as THREE from "three";
  *  industrial / rustic looks for warehouses + lofts. */
 export type WallStyle = "plain" | "painted" | "concrete" | "brick";
 
+/** User-selectable floor material — picked in the Project gear menu.
+ *  Defaults to "wood" (light-oak planks shipped originally). "tile" gives
+ *  a polished ceramic-tile grid, "concrete" a polished-concrete look, and
+ *  "carpet" a soft commercial-loop carpet. */
+export type FloorStyle = "wood" | "tile" | "concrete" | "carpet";
+
 interface DrywallOpts {
   /** Base wall color in hex (matches the painted plaster) */
   base: string;
@@ -413,6 +419,176 @@ export function woodFloorTexture(opts: {
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.anisotropy = 8;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  textureCache.set(key, tex);
+  return tex;
+}
+
+/** Ceramic-tile floor — grid of square tiles with grout lines + a soft
+ *  highlight on each tile so it reads as polished, not matte. */
+export function tileFloorTexture(opts: { base: string }): THREE.CanvasTexture {
+  const key = `tile-floor:${opts.base}`;
+  const cached = textureCache.get(key);
+  if (cached) return cached as THREE.CanvasTexture;
+
+  const size = 512;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d")!;
+
+  // Grout fill — slightly darker than the tile base.
+  ctx.fillStyle = shiftHex(opts.base, -32);
+  ctx.fillRect(0, 0, size, size);
+
+  // 4×4 grid of tiles with a 4px grout gap.
+  const tiles = 4;
+  const tileSize = size / tiles;
+  const grout = 4;
+  for (let r = 0; r < tiles; r++) {
+    for (let cIdx = 0; cIdx < tiles; cIdx++) {
+      const x = cIdx * tileSize + grout / 2;
+      const y = r * tileSize + grout / 2;
+      const w = tileSize - grout;
+      const h = tileSize - grout;
+      const jitter = (Math.random() - 0.5) * 12;
+      ctx.fillStyle = shiftHex(opts.base, jitter);
+      ctx.fillRect(x, y, w, h);
+      // Diagonal soft highlight on each tile for the polished look.
+      const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+      grad.addColorStop(0, "rgba(255,255,255,0.18)");
+      grad.addColorStop(0.4, "rgba(255,255,255,0)");
+      grad.addColorStop(1, "rgba(0,0,0,0.06)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, y, w, h);
+    }
+  }
+
+  // Fine speckle so it doesn't read as plastic.
+  const img = ctx.getImageData(0, 0, size, size);
+  const data = img.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 10;
+    data[i] = clamp(data[i] + n);
+    data[i + 1] = clamp(data[i + 1] + n);
+    data[i + 2] = clamp(data[i + 2] + n);
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  textureCache.set(key, tex);
+  return tex;
+}
+
+/** Polished-concrete floor — large mottled splotches + aggregate dots,
+ *  much smoother and shinier than the wall-style concrete (which is
+ *  matte and noisier). */
+export function concreteFloorTexture(opts: {
+  base: string;
+}): THREE.CanvasTexture {
+  const key = `concrete-floor:${opts.base}`;
+  const cached = textureCache.get(key);
+  if (cached) return cached as THREE.CanvasTexture;
+
+  const size = 512;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d")!;
+
+  ctx.fillStyle = opts.base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Wide soft splotches for the polished sheen.
+  ctx.globalAlpha = 0.12;
+  for (let i = 0; i < 10; i++) {
+    const cx = Math.random() * size;
+    const cy = Math.random() * size;
+    const r = 90 + Math.random() * 240;
+    const tone = Math.random() < 0.5 ? "#ffffff" : "#000000";
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0, tone);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+  }
+  ctx.globalAlpha = 1;
+
+  // Light pixel noise.
+  const img = ctx.getImageData(0, 0, size, size);
+  const data = img.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 22;
+    data[i] = clamp(data[i] + n);
+    data[i + 1] = clamp(data[i + 1] + n);
+    data[i + 2] = clamp(data[i + 2] + n);
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Aggregate pebbles — smaller and sparser than the wall variant.
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 0.5 + Math.random() * 1.2;
+    ctx.fillStyle =
+      Math.random() < 0.5 ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.14)";
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  textureCache.set(key, tex);
+  return tex;
+}
+
+/** Commercial loop-pile carpet — short tight fibres with a subtle weave
+ *  pattern. Slightly desaturated, soft, no specular hits. */
+export function carpetFloorTexture(opts: {
+  base: string;
+}): THREE.CanvasTexture {
+  const key = `carpet-floor:${opts.base}`;
+  const cached = textureCache.get(key);
+  if (cached) return cached as THREE.CanvasTexture;
+
+  const size = 256;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d")!;
+
+  ctx.fillStyle = opts.base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Tight fibre dots — many short strokes with tiny color jitter.
+  for (let i = 0; i < 5200; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const jitter = (Math.random() - 0.5) * 28;
+    ctx.fillStyle = shiftHex(opts.base, jitter);
+    ctx.fillRect(x, y, 1.4, 1.4);
+  }
+
+  // Subtle horizontal weave bands.
+  ctx.strokeStyle = "rgba(0,0,0,0.05)";
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < 48; i++) {
+    const y = (i / 48) * size + Math.random();
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(size, y);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
   tex.colorSpace = THREE.SRGBColorSpace;
   textureCache.set(key, tex);
   return tex;

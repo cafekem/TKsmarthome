@@ -140,6 +140,11 @@ interface DesignState {
   /** When the user is in POV mode, this is the camera-device id whose POV
       the 3D scene is rendering. Cleared when leaving POV. */
   cameraPovTargetId: string | null;
+  /** Pan offset in radians applied on top of the POV camera's spec heading.
+   *  Users nudge this via the ◀/▶ arrows in the POV viewfinder for cameras
+   *  that physically swivel (dome / fisheye / multi-sensor / PTZ). Reset to
+   *  0 every time POV mode is entered or exited. */
+  cameraPovPanOffset: number;
   /** Which right-sidebar tab is showing — properties or the AI chat. */
   rightTab: "properties" | "ai";
   /**
@@ -198,6 +203,8 @@ interface DesignState {
    */
   enterCameraPov(deviceId: string): void;
   exitCameraPov(): void;
+  /** Bump the POV pan offset by deltaRad (positive = right, negative = left). */
+  nudgeCameraPovPan(deltaRad: number): void;
   setRightTab(tab: "properties" | "ai"): void;
   pingAICursor(input: {
     x: number;
@@ -326,6 +333,7 @@ export const useDesignStore = create<DesignState>()(
         visibility: DEFAULT_VISIBILITY,
         walkSpawnOverride: null,
         cameraPovTargetId: null,
+        cameraPovPanOffset: 0,
         rightTab: "ai",
         aiCursor: null,
 
@@ -443,9 +451,13 @@ export const useDesignStore = create<DesignState>()(
         },
 
         enterCameraPov(deviceId) {
-          // Auto-switch to the 3D view if we're not already there.
+          // Auto-switch to the 3D view if we're not already there. Reset
+          // the pan offset so a freshly-entered POV always starts at the
+          // device's spec heading, not wherever the previous session left
+          // the pan dial.
           set({
             cameraPovTargetId: deviceId,
+            cameraPovPanOffset: 0,
             threeDMode: "pov",
             viewMode: "3d",
             selectedDeviceId: deviceId,
@@ -453,7 +465,24 @@ export const useDesignStore = create<DesignState>()(
         },
 
         exitCameraPov() {
-          set({ cameraPovTargetId: null, threeDMode: "orbit" });
+          set({
+            cameraPovTargetId: null,
+            cameraPovPanOffset: 0,
+            threeDMode: "orbit",
+          });
+        },
+
+        nudgeCameraPovPan(deltaRad) {
+          set((s) => {
+            const next = s.cameraPovPanOffset + deltaRad;
+            // Hard-cap at ±90° so the pan never crosses behind the device.
+            // (Real domes can spin 360°, but for fixed/PTZ a ±90° sweep is
+            // the believable range and stops the user getting lost.)
+            const MAX = Math.PI / 2;
+            return {
+              cameraPovPanOffset: Math.max(-MAX, Math.min(MAX, next)),
+            };
+          });
         },
 
         setRightTab(tab) {

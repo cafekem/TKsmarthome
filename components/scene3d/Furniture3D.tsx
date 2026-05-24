@@ -99,6 +99,10 @@ const DEFAULT_DIMS: Record<FurnitureItem["type"], { lengthM: number; widthM: num
   bed: { lengthM: 2.0, widthM: 1.5 },
   bookshelf: { lengthM: 1.0, widthM: 0.35 },
   "tv-display": { lengthM: 1.4, widthM: 0.1 },
+  painting: { lengthM: 0.9, widthM: 0.05 },
+  window: { lengthM: 1.4, widthM: 0.08 },
+  "vending-machine": { lengthM: 0.9, widthM: 0.8 },
+  outlet: { lengthM: 0.12, widthM: 0.03 },
 };
 
 function renderMesh(type: FurnitureItem["type"]) {
@@ -125,6 +129,14 @@ function renderMesh(type: FurnitureItem["type"]) {
       return <Bookshelf />;
     case "tv-display":
       return <TvDisplay />;
+    case "painting":
+      return <Painting />;
+    case "window":
+      return <Window />;
+    case "vending-machine":
+      return <VendingMachine />;
+    case "outlet":
+      return <Outlet />;
   }
 }
 
@@ -1051,4 +1063,268 @@ function buildMarbleTexture(): THREE.CanvasTexture {
   // Suppress unused-vars warning
   void MARBLE_VEIN;
   return tex;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// PAINTING — wall-mounted canvas, framed in dark wood. Default 0.9 ×
+// 0.05m (width × depth from wall). Long axis = wall direction. Hangs
+// centered at ~1.6m above the floor (eye level).
+// ─────────────────────────────────────────────────────────────────
+function Painting() {
+  return (
+    <group position={[0, 1.55, 0]}>
+      {/* Dark frame */}
+      <RoundedBox args={[0.9, 0.65, 0.04]} radius={0.005} smoothness={2} castShadow>
+        <meshStandardMaterial color={WOOD_DARK} roughness={0.55} />
+      </RoundedBox>
+      {/* Canvas — abstract color block + accent stripe for visual interest */}
+      <mesh position={[0, 0, 0.022]}>
+        <planeGeometry args={[0.78, 0.53]} />
+        <meshStandardMaterial color="#c9b899" roughness={0.92} />
+      </mesh>
+      <mesh position={[-0.12, 0.05, 0.024]}>
+        <planeGeometry args={[0.34, 0.34]} />
+        <meshStandardMaterial color="#5b7a86" roughness={0.92} />
+      </mesh>
+      <mesh position={[0.18, -0.08, 0.024]}>
+        <planeGeometry args={[0.18, 0.22]} />
+        <meshStandardMaterial color="#a04a3a" roughness={0.92} />
+      </mesh>
+      <mesh position={[0.06, 0.18, 0.024]}>
+        <planeGeometry args={[0.5, 0.04]} />
+        <meshStandardMaterial color="#3a4a5a" roughness={0.92} />
+      </mesh>
+    </group>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// WINDOW — wall-mounted glass with a four-pane mullion grid. Reads in
+// BOTH daylight and dusk (no time-of-day gating) so the building
+// always feels habitable. Emissive cool-blue back panel suggests sky
+// behind the glass. Default 1.4 × 0.08m (width × depth from wall),
+// 1.1m tall, sill at 0.9m off the floor.
+// ─────────────────────────────────────────────────────────────────
+function Window() {
+  return (
+    <group position={[0, 1.45, 0]}>
+      {/* Outer frame — light wood */}
+      <RoundedBox args={[1.4, 1.1, 0.06]} radius={0.01} smoothness={2} castShadow>
+        <meshStandardMaterial color={WOOD_LIGHT} roughness={0.6} />
+      </RoundedBox>
+      {/* Sky back-pane — emissive cool-blue so the window glows even in
+          dusk lighting. Slightly behind the frame to suggest depth. */}
+      <mesh position={[0, 0, -0.005]}>
+        <planeGeometry args={[1.3, 1.0]} />
+        <meshStandardMaterial
+          color="#b6d8e8"
+          emissive="#cfe7f3"
+          emissiveIntensity={0.5}
+          roughness={0.4}
+          metalness={0.1}
+        />
+      </mesh>
+      {/* Glass front — tinted translucent layer for the "glassy" look. */}
+      <mesh position={[0, 0, 0.03]}>
+        <planeGeometry args={[1.3, 1.0]} />
+        <meshStandardMaterial
+          color="#e8f1f7"
+          transparent
+          opacity={0.32}
+          roughness={0.05}
+          metalness={0.2}
+        />
+      </mesh>
+      {/* Mullion cross — horizontal + vertical sash bar splits the
+          window into four panes. */}
+      <mesh position={[0, 0, 0.033]}>
+        <planeGeometry args={[1.3, 0.025]} />
+        <meshStandardMaterial color={WOOD_LIGHT} roughness={0.55} />
+      </mesh>
+      <mesh position={[0, 0, 0.033]}>
+        <planeGeometry args={[0.025, 1.0]} />
+        <meshStandardMaterial color={WOOD_LIGHT} roughness={0.55} />
+      </mesh>
+      {/* Sill — small ledge below the frame, sticks out a few cm. */}
+      <RoundedBox
+        args={[1.46, 0.05, 0.18]}
+        radius={0.01}
+        smoothness={2}
+        position={[0, -0.58, 0.05]}
+        castShadow
+      >
+        <meshStandardMaterial color={WOOD_LIGHT} roughness={0.55} />
+      </RoundedBox>
+    </group>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// VENDING MACHINE — tall fridge-form factor. Glass front showing a 3×4
+// grid of "products" inside, lit by an emissive interior so it reads
+// as plugged-in. Default 0.9 × 0.8m footprint, 1.9m tall.
+// ─────────────────────────────────────────────────────────────────
+function VendingMachine() {
+  // Coca-Cola-ish red branding so the machine reads as a real consumer
+  // product, not a black locker. Bright body + a white "label" panel
+  // across the top half + the glass-front product grid.
+  const BRAND_RED = "#d62828";
+  const BRAND_RED_DEEP = "#9a1d1f";
+  const BRAND_WHITE = "#f5f3ed";
+  return (
+    <group>
+      {/* Main body — bright branded red */}
+      <RoundedBox
+        args={[0.9, 1.9, 0.8]}
+        radius={0.03}
+        smoothness={3}
+        position={[0, 0.95, 0]}
+        castShadow
+      >
+        <meshStandardMaterial color={BRAND_RED} roughness={0.55} metalness={0.15} />
+      </RoundedBox>
+      {/* Darker red plinth at the bottom — the "kick panel". Adds
+          weight to the silhouette and breaks up the flat red. */}
+      <mesh position={[0, 0.06, 0]}>
+        <boxGeometry args={[0.92, 0.12, 0.82]} />
+        <meshStandardMaterial color={BRAND_RED_DEEP} roughness={0.7} />
+      </mesh>
+      {/* White brand label panel — a wide horizontal stripe across the
+          top third where a real machine would print its logo. Reads as
+          "this is branded merchandise" at a glance. */}
+      <mesh position={[0, 1.55, 0.402]}>
+        <planeGeometry args={[0.84, 0.36]} />
+        <meshStandardMaterial
+          color={BRAND_WHITE}
+          roughness={0.5}
+          metalness={0.05}
+        />
+      </mesh>
+      {/* Wordmark stand-in — scripty red bar across the white label so
+          the panel doesn't read as a blank rectangle. */}
+      <mesh position={[0, 1.55, 0.404]}>
+        <planeGeometry args={[0.6, 0.09]} />
+        <meshStandardMaterial color={BRAND_RED} roughness={0.5} />
+      </mesh>
+      {/* "Enjoy" sub-mark under it */}
+      <mesh position={[0, 1.42, 0.404]}>
+        <planeGeometry args={[0.34, 0.05]} />
+        <meshStandardMaterial color={BRAND_RED_DEEP} roughness={0.5} />
+      </mesh>
+      {/* Interior backlight — bright warm panel behind the glass that
+          lights the products like a real vending machine. */}
+      <mesh position={[0, 0.78, 0.34]}>
+        <planeGeometry args={[0.74, 1.0]} />
+        <meshStandardMaterial
+          color="#fff8dc"
+          emissive="#fff4c2"
+          emissiveIntensity={0.7}
+          roughness={0.6}
+        />
+      </mesh>
+      {/* Glass front — tinted translucent panel that lets us "see"
+          the products inside. Narrower than before so the white label
+          panel above it gets prominence. */}
+      <mesh position={[0, 0.78, 0.405]}>
+        <planeGeometry args={[0.74, 1.0]} />
+        <meshStandardMaterial
+          color="#e6ecf2"
+          transparent
+          opacity={0.35}
+          roughness={0.1}
+          metalness={0.4}
+        />
+      </mesh>
+      {/* Product rows — 3 shelves × 4 items each, each a tiny colored
+          box. The grid sells "this is a snack/drink machine". */}
+      {[0.36, 0.06, -0.24].map((y, row) => (
+        <group key={row}>
+          {[-0.27, -0.09, 0.09, 0.27].map((x, col) => (
+            <mesh key={col} position={[x, 0.78 + y, 0.36]}>
+              <boxGeometry args={[0.13, 0.14, 0.03]} />
+              <meshStandardMaterial
+                color={PRODUCT_COLORS[(row * 4 + col) % PRODUCT_COLORS.length]}
+                roughness={0.55}
+              />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      {/* Coin/card slot column at the right — small darker plate */}
+      <mesh position={[0.34, 0.45, 0.41]}>
+        <planeGeometry args={[0.12, 0.30]} />
+        <meshStandardMaterial color="#1a1a1a" roughness={0.85} />
+      </mesh>
+      {/* Delivery slot at the bottom */}
+      <mesh position={[0, 0.22, 0.41]}>
+        <planeGeometry args={[0.5, 0.14]} />
+        <meshStandardMaterial color="#1a1a1a" roughness={0.85} />
+      </mesh>
+    </group>
+  );
+}
+
+// Small palette for the vending product blocks — keeps the front face
+// reading as "assortment" not "monochrome panel".
+const PRODUCT_COLORS = [
+  "#dc2626",
+  "#0ea5e9",
+  "#f59e0b",
+  "#10b981",
+  "#8b5cf6",
+  "#f43f5e",
+  "#22c55e",
+  "#3b82f6",
+  "#eab308",
+  "#ec4899",
+  "#06b6d4",
+  "#d97706",
+];
+
+// ─────────────────────────────────────────────────────────────────
+// OUTLET — duplex wall outlet at standard ~30cm above floor. Tiny —
+// 12cm wide × 7cm tall × 3cm out from wall. Two oval slot pairs +
+// ground hole stamped on a cream wall plate.
+// ─────────────────────────────────────────────────────────────────
+function Outlet() {
+  return (
+    <group position={[0, 0.30, 0]}>
+      {/* Wall plate — cream rectangle that sits flush on the wall */}
+      <mesh position={[0, 0, 0.005]}>
+        <planeGeometry args={[0.12, 0.08]} />
+        <meshStandardMaterial color="#f1ead9" roughness={0.6} />
+      </mesh>
+      {/* Slim bezel ring — thin darker outline */}
+      <mesh position={[0, 0, 0.006]}>
+        <ringGeometry args={[0.052, 0.058, 24]} />
+        <meshStandardMaterial color="#c4ba9f" roughness={0.7} side={THREE.DoubleSide} />
+      </mesh>
+      {/* Upper socket pair (oval slots + ground) */}
+      <mesh position={[-0.013, 0.018, 0.008]}>
+        <planeGeometry args={[0.004, 0.014]} />
+        <meshStandardMaterial color="#101010" roughness={0.5} />
+      </mesh>
+      <mesh position={[0.013, 0.018, 0.008]}>
+        <planeGeometry args={[0.004, 0.014]} />
+        <meshStandardMaterial color="#101010" roughness={0.5} />
+      </mesh>
+      <mesh position={[0, 0.005, 0.008]}>
+        <circleGeometry args={[0.0035, 12]} />
+        <meshStandardMaterial color="#101010" roughness={0.5} />
+      </mesh>
+      {/* Lower socket pair */}
+      <mesh position={[-0.013, -0.022, 0.008]}>
+        <planeGeometry args={[0.004, 0.014]} />
+        <meshStandardMaterial color="#101010" roughness={0.5} />
+      </mesh>
+      <mesh position={[0.013, -0.022, 0.008]}>
+        <planeGeometry args={[0.004, 0.014]} />
+        <meshStandardMaterial color="#101010" roughness={0.5} />
+      </mesh>
+      <mesh position={[0, -0.035, 0.008]}>
+        <circleGeometry args={[0.0035, 12]} />
+        <meshStandardMaterial color="#101010" roughness={0.5} />
+      </mesh>
+    </group>
+  );
 }

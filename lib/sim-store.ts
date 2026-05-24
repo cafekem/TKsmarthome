@@ -32,6 +32,17 @@ interface SimState {
    *  ("follow mode"). Orbit controls are suppressed and the FollowCamera
    *  controller updates the camera every frame. */
   following: boolean;
+  /** Cinematic cutaway state. When a NEW camera locks on the threat we
+   *  briefly hijack the chase view to render through THAT camera's POV
+   *  for a few frames, then restore — like a surveillance-monitor cut.
+   *  cutawayCamId === null means we're in normal chase. */
+  cutawayCamId: string | null;
+  /** performance.now() of the cutaway start. Used by FollowCamera to time
+   *  the cut duration. */
+  cutawayStartedAt: number | null;
+  /** performance.now() that the next cutaway is allowed at — debounces
+   *  detection chatter so cuts don't fire every frame. */
+  cutawayCooldownUntil: number;
 
   play(): void;
   pause(): void;
@@ -47,6 +58,13 @@ interface SimState {
   markFinished(): void;
   startFollow(): void;
   stopFollow(): void;
+  /** Trigger a cinematic cutaway through `camId`'s POV. Caller passes the
+   *  duration in seconds; FollowCamera reads cutawayStartedAt to time the
+   *  cut. Honors the internal cooldown — no-op if cooldown is active. */
+  triggerCutaway(camId: string, durationSec: number, cooldownSec: number): void;
+  /** Clear the cutaway state — called by FollowCamera when the cut's
+   *  duration is up. */
+  endCutaway(): void;
 }
 
 export const useSimStore = create<SimState>((set, get) => ({
@@ -63,7 +81,14 @@ export const useSimStore = create<SimState>((set, get) => ({
   longestBlindInterval: 0,
   blindIntervalStart: null,
   finished: false,
-  following: false,
+  // Auto-follow by default in sim mode — the whole point of sim is to
+  // watch the subject move through coverage, so the chase view is the
+  // expected starting state. Users can hit "Exit follow" to fall back
+  // to free orbit.
+  following: true,
+  cutawayCamId: null,
+  cutawayStartedAt: null,
+  cutawayCooldownUntil: 0,
 
   play() {
     set({ running: true, finished: false });
@@ -159,5 +184,20 @@ export const useSimStore = create<SimState>((set, get) => ({
   },
   stopFollow() {
     set({ following: false });
+  },
+  triggerCutaway(camId, durationSec, cooldownSec) {
+    const now = performance.now();
+    const s = get();
+    // Respect cooldown — quietly skip if a cut just played.
+    if (now < s.cutawayCooldownUntil) return;
+    set({
+      cutawayCamId: camId,
+      cutawayStartedAt: now,
+      // Cooldown starts AT the end of this cut so we never overlap.
+      cutawayCooldownUntil: now + (durationSec + cooldownSec) * 1000,
+    });
+  },
+  endCutaway() {
+    set({ cutawayCamId: null, cutawayStartedAt: null });
   },
 }));

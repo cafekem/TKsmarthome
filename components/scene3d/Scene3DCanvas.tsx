@@ -22,6 +22,8 @@ import { WalkController, WalkHUD, useWalkUIStore } from "./WalkController";
 import { CameraPovController } from "./CameraPovController";
 import { SimController } from "@/components/simulation/SimController";
 import { Actor3D } from "@/components/simulation/Actor3D";
+import { collideAgainstWalls, positionOnPath } from "@/lib/detection";
+import { WALK_SPEED } from "@/lib/walk";
 import { SubjectTrail3D } from "@/components/simulation/SubjectTrail3D";
 import { DetectionVisualizer3D } from "@/components/simulation/DetectionVisualizer3D";
 import { ActorFollowController } from "@/components/simulation/ActorFollowController";
@@ -32,7 +34,13 @@ import { Door3D } from "./Door3D";
 import { Furniture3D } from "./Furniture3D";
 import { Annotation3D } from "./Annotation3D";
 import { CablingLines3D } from "./CablingLines3D";
-import { drywallTexture, woodFloorTexture } from "./textures";
+import {
+  carpetFloorTexture,
+  concreteFloorTexture,
+  drywallTexture,
+  tileFloorTexture,
+  woodFloorTexture,
+} from "./textures";
 
 interface Scene3DCanvasProps {
   width: number;
@@ -70,6 +78,9 @@ export function Scene3DCanvas({
   const threeDMode = useDesignStore((s) => s.threeDMode);
   const setThreeDMode = useDesignStore((s) => s.setThreeDMode);
   const cameraPovTargetId = useDesignStore((s) => s.cameraPovTargetId);
+  // The cutaway target — same hide-mesh semantics as cameraPovTargetId
+  // (both mean "the user is looking through this camera right now").
+  const cutawayCamIdForHide = useSimStore((s) => s.cutawayCamId);
   const addDevice = useDesignStore((s) => s.addDevice);
   const selectedDeviceId = useDesignStore((s) => s.selectedDeviceId);
   const selectDevice = useDesignStore((s) => s.selectDevice);
@@ -384,6 +395,7 @@ export function Scene3DCanvas({
           depth={span.z * 1.1}
           isLight={isLight}
           floorColor={floorColor}
+          floorStyle={floor.floorStyle ?? "wood"}
         />
 
 
@@ -532,7 +544,14 @@ export function Scene3DCanvas({
                 updateDevice(floor.id, device.id, { mountHeight })
               }
               onEnterPov={() => enterCameraPov(device.id)}
-              isPovTarget={device.id === cameraPovTargetId}
+              // Hide this camera's mesh + its detection-pulse / scanner
+              // / REC dot when the virtual camera is looking THROUGH it —
+              // either via manual POV or during a sim cutaway. Otherwise
+              // the rings sit on top of the lens and block the view.
+              isPovTarget={
+                device.id === cameraPovTargetId ||
+                device.id === cutawayCamIdForHide
+              }
             />
           ))}
 
@@ -734,25 +753,61 @@ function FloorPlane({
   depth,
   isLight,
   floorColor,
+  floorStyle,
 }: {
   center: [number, number];
   width: number;
   depth: number;
   isLight: boolean;
   floorColor: string;
+  floorStyle: import("@/types/design").FloorStyle;
 }) {
-  const texture = useMemo(() => {
-    const base = woodFloorTexture({
-      base: floorColor,
-      grain: isLight ? "#8a6634" : "#1f1812",
-    });
+  const { texture, roughness, metalness } = useMemo(() => {
+    // Each style picks its own tile size, source canvas, and material
+    // response so wood feels grainy, tile crisp & glossy, concrete soft,
+    // and carpet matte.
+    let base;
+    let tilePerMeter; // canvas-tile size in meters (smaller = denser repeats)
+    let rough = 0.7;
+    let metal = 0.04;
+    switch (floorStyle) {
+      case "tile":
+        base = tileFloorTexture({ base: floorColor });
+        tilePerMeter = 2.0; // ~50cm tiles → canvas of 4 tiles covers ~2m
+        rough = 0.32;
+        metal = 0.18;
+        break;
+      case "concrete":
+        base = concreteFloorTexture({ base: floorColor });
+        tilePerMeter = 3.5;
+        rough = 0.55;
+        metal = 0.1;
+        break;
+      case "carpet":
+        base = carpetFloorTexture({ base: floorColor });
+        tilePerMeter = 1.2;
+        rough = 0.95;
+        metal = 0.02;
+        break;
+      case "wood":
+      default:
+        base = woodFloorTexture({
+          base: floorColor,
+          grain: isLight ? "#8a6634" : "#1f1812",
+        });
+        tilePerMeter = 4.0; // 4-plank canvas covers ~4m
+        rough = 0.7;
+        metal = 0.04;
+        break;
+    }
     const tex = base.clone();
-    // Each tile of the canvas (4 planks tall) covers ~4m, so divide by 4
-    // to get one plank per meter.
-    tex.repeat.set(Math.max(1, width / 4), Math.max(1, depth / 4));
+    tex.repeat.set(
+      Math.max(1, width / tilePerMeter),
+      Math.max(1, depth / tilePerMeter),
+    );
     tex.needsUpdate = true;
-    return tex;
-  }, [floorColor, isLight, width, depth]);
+    return { texture: tex, roughness: rough, metalness: metal };
+  }, [floorColor, isLight, width, depth, floorStyle]);
 
   return (
     <mesh
@@ -764,8 +819,8 @@ function FloorPlane({
       <meshStandardMaterial
         map={texture}
         color={floorColor}
-        roughness={0.7}
-        metalness={0.04}
+        roughness={roughness}
+        metalness={metalness}
       />
     </mesh>
   );
@@ -895,7 +950,7 @@ function Wall3D({
     );
     clone.needsUpdate = true;
     return clone;
-  }, [color, isLight, length, ceilingHeight]);
+  }, [color, isLight, length, ceilingHeight, wallStyle]);
 
   // Compute door openings along the wall in wall-local X (range [-length/2,
   // +length/2]). For each door: project its world position onto the wall's
@@ -1197,8 +1252,18 @@ function Device3D({
             wrapper level so the rotation order is well-defined and the
             FOV cone (drawn alongside the mesh in sim mode) inherits the
             same orientation. DeviceMesh subtypes that previously applied
-            their own yaw now expect yaw=0 from outside. */}
-        <group rotation={[0, -device.rotation, 0]}>
+            their own yaw now expect yaw=0 from outside.
+
+            CameraYawTracker is a small inner component (cameras only)
+            that lerps the yaw group's rotation toward the subject when
+            the camera is actively detecting — so the camera body
+            visibly tracks the threat as they move through the room. */}
+        <CameraYawTracker
+          deviceType={device.type}
+          baseYaw={-device.rotation}
+          detecting={detecting}
+          cameraWorldPos={{ x: px, z: pz }}
+        >
           <group rotation={[device.tilt ?? 0, 0, 0]}>
             {/* Hide this camera's mesh while we're looking through it —
                 otherwise the virtual camera ends up inside the tinted-
@@ -1213,7 +1278,7 @@ function Device3D({
               />
             )}
           </group>
-        </group>
+        </CameraYawTracker>
       </group>
 
       {/* Floating POV button — hovers above the camera body. Click to
@@ -1258,7 +1323,7 @@ function Device3D({
         </Html>
       )}
 
-      {detecting && (
+      {detecting && !isPovTarget && (
         <>
           <pointLight
             position={[0, 0, 0]}
@@ -1268,7 +1333,9 @@ function Device3D({
           />
           {/* Detection pulse — a pair of pulsing rings under the camera body
               that breathe outwards. Reads from any angle, signals "this
-              device is firing right now". */}
+              device is firing right now". Suppressed when we're looking
+              THROUGH this camera (manual POV or sim cutaway) because the
+              rings sit at the lens position and block the view. */}
           <CameraDetectionPulse />
           {/* Cameras-only flourishes when actively detecting: a spinning
               scanner ring around the lens and a blinking REC dot above
@@ -1409,6 +1476,74 @@ function Device3D({
  * from any orbit angle. Uses useFrame to mutate material opacity + ring
  * scale in place — no React re-renders per frame.
  */
+/**
+ * Wraps the yaw group for a Device3D. For cameras that are currently
+ * detecting, every frame it computes the live subject world position
+ * and lerps the group's yaw toward "facing the subject" — so the camera
+ * body visually tracks the threat as they walk through the room (PTZ-
+ * style behavior, even for fixed cameras).
+ *
+ * For non-cameras or when not detecting, it just damps the yaw back to
+ * the device's spec'd `baseYaw` so the camera returns to its mounted
+ * orientation when the subject leaves coverage.
+ */
+function CameraYawTracker({
+  deviceType,
+  baseYaw,
+  detecting,
+  cameraWorldPos,
+  children,
+}: {
+  deviceType: DeviceType;
+  baseYaw: number;
+  detecting: boolean;
+  cameraWorldPos: { x: number; z: number };
+  children: React.ReactNode;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  const floor = useActiveFloor();
+  useFrame((_, delta) => {
+    if (!ref.current) return;
+    const dt = Math.min(delta, 0.06);
+
+    // Default behavior — damp toward the device's spec orientation.
+    let targetYaw = baseYaw;
+
+    if (deviceType === "camera" && detecting && floor) {
+      const path = floor.simPath ?? [];
+      if (path.length >= 2) {
+        const t = useSimStore.getState().t;
+        const { position } = positionOnPath(path, t, WALK_SPEED, floor.scale);
+        const ACTOR_RADIUS_PX = 0.28 * floor.scale;
+        const collided = collideAgainstWalls(
+          position,
+          floor.walls,
+          ACTOR_RADIUS_PX,
+        );
+        const subjX = collided.x / floor.scale;
+        const subjZ = collided.y / floor.scale;
+        // Camera mesh's local +X axis is the spec "facing" direction. The
+        // yaw group is rotated by -device.rotation, so to point at the
+        // subject we want -atan2(dz, dx).
+        const dx = subjX - cameraWorldPos.x;
+        const dz = subjZ - cameraWorldPos.z;
+        targetYaw = -Math.atan2(dz, dx);
+      }
+    }
+
+    // Shortest-angle damp — handles wrap-around so the camera doesn't
+    // spin the long way when the subject crosses the ±π seam.
+    const cur = ref.current.rotation.y;
+    let diff = targetYaw - cur;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    const damping = detecting ? 5 : 3; // snappier while tracking
+    const alpha = 1 - Math.exp(-damping * dt);
+    ref.current.rotation.y = cur + diff * alpha;
+  });
+  return <group ref={ref}>{children}</group>;
+}
+
 function CameraDetectionPulse() {
   const ring1 = useRef<THREE.Mesh>(null);
   const ring2 = useRef<THREE.Mesh>(null);
