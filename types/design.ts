@@ -59,7 +59,16 @@ export type SensorSubtype =
   | "back-box"
   | "mount-bracket"
   | "conduit"
-  | "raceway";
+  | "raceway"
+    // Smart-home devices (lights, plugs, locks, climate, hubs, speakers).
+  | "smart-light"
+    | "smart-plug"
+    | "smart-switch"
+    | "smart-lock"
+    | "thermostat"
+    | "smart-hub"
+    | "smart-speaker"
+    | "leak-sensor";
 export type NetworkSubtype = "switch" | "access-point" | "nvr";
 
 /**
