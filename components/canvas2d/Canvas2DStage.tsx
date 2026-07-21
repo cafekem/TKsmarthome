@@ -488,13 +488,6 @@ export function Canvas2DStage({
       {!planImage && floor.devices.length === 0 && floor.walls.length === 0 && (
         <FloorPlanEmptyState
           onUpload={onRequestUpload}
-          onLoadDemo={() => {
-            useDesignStore.getState().loadDemo();
-            toast.success("Demo office loaded", {
-              description:
-                "Twelve walls, ten devices. Flip to 3D to see the building extrude.",
-            });
-          }}
         />
       )}
 
@@ -878,10 +871,8 @@ export function Canvas2DStage({
 
 function FloorPlanEmptyState({
   onUpload,
-  onLoadDemo,
 }: {
   onUpload: () => void;
-  onLoadDemo: () => void;
 }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
@@ -959,21 +950,6 @@ function FloorPlanEmptyState({
               <path d="M12 5v14M5 12l7-7 7 7" />
             </svg>
             Upload plan
-          </button>
-          <button
-            type="button"
-            onClick={onLoadDemo}
-            className="inline-flex h-11 items-center gap-2 rounded-full bg-primary px-5 text-[0.92rem] font-medium text-primary-foreground btn-lift shadow-[0_10px_28px_-10px_oklch(0.55_0.17_245/55%)] hover:bg-primary/90"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="size-4"
-              aria-hidden="true"
-            >
-              <path d="M12 2l2.39 5.69L20 8.59l-4 4.13.96 5.78L12 15.77 7.04 18.5 8 12.72l-4-4.13 5.61-.9L12 2z" />
-            </svg>
-            Try demo
           </button>
         </div>
       </div>
