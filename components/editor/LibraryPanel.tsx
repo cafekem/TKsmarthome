@@ -44,6 +44,23 @@ const DOOR_HARDWARE_SUBCATEGORIES = new Set<string>([
   "power-supply",
 ]);
 
+  /**
+   * Smart-home devices — lights, plugs, switches, locks, thermostats, hubs,
+    * speakers, and leak sensors. These live under `sensor` in the catalog
+     * (they share its lifecycle model) but surface in the library under their
+      * own "Smarthome" tab, and are FILTERED OUT of the regular "Sensors" tab.
+       */
+const SMARTHOME_SUBCATEGORIES = new Set<string>([
+    "smart-light",
+    "smart-plug",
+    "smart-switch",
+    "smart-lock",
+    "thermostat",
+    "smart-hub",
+    "smart-speaker",
+    "leak-sensor",
+  ]);
+
 /**
  * Perimeter / exterior security devices. LPR cameras live under camera in
  * the catalog; turnstiles, bollards, and gate operators live under reader.
