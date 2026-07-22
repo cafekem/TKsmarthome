@@ -71,7 +71,16 @@ export interface CatalogProduct {
     | "raceway"
     | "switch"
     | "access-point"
-    | "nvr";
+    | "nvr"
+    // Smart-home devices — sold as their own "Smarthome" library tab.
+    | "smart-light"
+    | "smart-plug"
+    | "smart-switch"
+    | "smart-lock"
+    | "thermostat"
+    | "smart-hub"
+    | "smart-speaker"
+    | "leak-sensor";
 
   // Pricing
   msrp: number;
@@ -2965,6 +2974,166 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     description: "Genetec Security Center appliance, 32 channels, hardened OS, hybrid cloud",
     tags: ["nvr", "genetec", "streamvault", "security-center", "32ch", "16tb", "hardened"],
   },
+
+    // =======================================================================
+    // SMART HOME — Lighting, Plugs, Locks, Climate, Hubs & Speakers
+    // =======================================================================
+  {
+      id: "philips-hue-color-a19",
+            manufacturer: "Philips Hue",
+            model: "White and Color Ambiance A19",
+            name: "Smart Bulb",
+            fullName: "Philips Hue White and Color Ambiance A19",
+            category: "sensor",
+            subcategory: "smart-light",
+            msrp: 50,
+            streetPrice: 35,
+            laborHours: 0.25,
+            specs: {
+              wireless: true,
+                      indoor: true,
+                      outdoor: false,
+                },
+                    description: "16M-color smart LED bulb, Zigbee, app + voice control",
+                    tags: ["smart-home", "light", "bulb", "zigbee", "hue", "color", "wireless"],
+                },
+      {
+            id: "kasa-kp125",
+            manufacturer: "TP-Link Kasa",
+            model: "KP125",
+            name: "Smart Plug",
+            fullName: "TP-Link Kasa KP125 Smart Plug",
+            category: "sensor",
+            subcategory: "smart-plug",
+            msrp: 25,
+            streetPrice: 18,
+            laborHours: 0.1,
+            specs: {
+                    wireless: true,
+                    indoor: true,
+                    outdoor: false,
+            },
+            description: "Wi-Fi smart plug with energy monitoring, no hub required",
+            tags: ["smart-home", "plug", "wifi", "kasa", "energy-monitoring"],
+      },
+              {
+                    id: "lutron-caseta-dimmer",
+                    manufacturer: "Lutron",
+                    model: "Caséta PD-6WCL",
+                    name: "In-Wall Smart Dimmer Switch",
+                    fullName: "Lutron Caséta PD-6WCL In-Wall Dimmer",
+                    category: "sensor",
+                    subcategory: "smart-switch",
+                    msrp: 70,
+                    streetPrice: 50,
+                    laborHours: 0.75,
+                    specs: {
+                            wireless: true,
+                            indoor: true,
+                            outdoor: false,
+                            mounting: "wall",
+                    },
+                    description: "In-wall smart dimmer, Lutron Clear Connect RF, neutral wire optional",
+                    tags: ["smart-home", "switch", "dimmer", "lutron", "caseta", "wireless"],
+              },
+                    {
+                          id: "schlage-encode-plus",
+                          manufacturer: "Schlage",
+                          model: "Encode Plus",
+                          name: "Smart Deadbolt",
+                          fullName: "Schlage Encode Plus Smart Wi-Fi Deadbolt",
+                          category: "sensor",
+                          subcategory: "smart-lock",
+                          msrp: 330,
+                          streetPrice: 230,
+                          laborHours: 1.0,
+                          specs: {
+                                  wireless: true,
+                                  indoor: true,
+                                  outdoor: true,
+                                  mounting: "surface",
+                          },
+                          description: "Wi-Fi + Apple Home Key deadbolt, keypad, auto-lock",
+                          tags: ["smart-home", "lock", "deadbolt", "schlage", "wifi", "keypad"],
+                      },
+                    {
+                          id: "ecobee-smart-premium",
+                          manufacturer: "Ecobee",
+                          model: "Smart Thermostat Premium",
+                          name: "Smart Thermostat",
+                          fullName: "Ecobee Smart Thermostat Premium",
+                          category: "sensor",
+                          subcategory: "thermostat",
+                          msrp: 250,
+                          streetPrice: 190,
+                          laborHours: 1.0,
+                          specs: {
+                                  wireless: true,
+                                  indoor: true,
+                                  outdoor: false,
+                                  mounting: "wall",
+                          },
+                          description: "Wi-Fi thermostat with built-in air quality monitor + remote sensor",
+                          tags: ["smart-home", "thermostat", "ecobee", "wifi", "climate", "hvac"],
+                    },
+                    {
+                          id: "smartthings-hub-v3",
+                          manufacturer: "SmartThings",
+                          model: "Hub (3rd Gen)",
+                          name: "Smart Home Hub",
+                          fullName: "Samsung SmartThings Hub (3rd Gen)",
+                          category: "sensor",
+                          subcategory: "smart-hub",
+                          msrp: 70,
+                          streetPrice: 60,
+                          laborHours: 0.5,
+                          specs: {
+                                  wireless: true,
+                                  indoor: true,
+                                  outdoor: false,
+                          },
+                          description: "Zigbee/Z-Wave hub, local automations, video backup",
+                          tags: ["smart-home", "hub", "smartthings", "zigbee", "z-wave"],
+                    },
+                    {
+                          id: "sonos-one-gen2",
+                          manufacturer: "Sonos",
+                          model: "One (Gen 2)",
+                          name: "Smart Speaker",
+                          fullName: "Sonos One (Gen 2) Smart Speaker",
+                          category: "sensor",
+                          subcategory: "smart-speaker",
+                          msrp: 220,
+                          streetPrice: 180,
+                          laborHours: 0.5,
+                          specs: {
+                                  wireless: true,
+                                  indoor: true,
+                                  outdoor: false,
+                          },
+                          description: "Voice-controlled smart speaker, Wi-Fi, Alexa built-in",
+                          tags: ["smart-home", "speaker", "sonos", "wifi", "voice-control", "audio"],
+                    },
+                    {
+                          id: "honeywell-lyric-leak",
+                          manufacturer: "Honeywell",
+                          model: "Lyric Water Leak and Freeze Detector",
+                          name: "Water Leak Sensor",
+                          fullName: "Honeywell Lyric Water Leak and Freeze Detector",
+                          category: "sensor",
+                          subcategory: "leak-sensor",
+                          msrp: 60,
+                          streetPrice: 45,
+                          laborHours: 0.5,
+                          specs: {
+                                  wireless: true,
+                                  indoor: true,
+                                  outdoor: false,
+                                  rangeMeters: 1,
+                          },
+                          description: "Wi-Fi water leak + freeze sensor, app alerts",
+                          tags: ["smart-home", "leak", "water", "honeywell", "wifi", "sensor"],
+                    },
 ];
 
 /**
