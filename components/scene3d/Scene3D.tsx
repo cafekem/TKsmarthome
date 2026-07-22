@@ -481,20 +481,7 @@ function EmptyState() {
             <Upload className="size-4" strokeWidth={2} />
             Upload floor plan
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              loadDemo();
-              toast.success("Demo office loaded", {
-                description: "15 catalog-backed devices placed across 6 rooms.",
-              });
-            }}
-            className="inline-flex h-11 items-center gap-2 rounded-full bg-primary px-5 text-[0.92rem] font-medium text-primary-foreground btn-lift shadow-[0_10px_28px_-10px_oklch(0.55_0.17_245/55%)] hover:bg-primary/90"
-          >
-            <Sparkles className="size-4" strokeWidth={2} />
-            Try demo
-          </button>
-        </div>
+          </div>
       </div>
     </div>
   );
