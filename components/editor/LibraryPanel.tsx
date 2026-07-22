@@ -525,6 +525,8 @@ export function LibraryPanel({ onCollapse }: { onCollapse?: () => void } = {}) {
                                   product.subcategory === "exit-sign" ||
                                   product.subcategory === "aed"
                                 ? "fire-life-safety"
+                        : SMARTHOME_SUBCATEGORIES.has(product.subcategory)
+                    ? "smarthome"
                                 : product.category;
                       const tone = TYPE_TONE[toneKey];
                       const preview = SUBCATEGORY_TO_PREVIEW[product.subcategory] ?? { type: "camera", subtype: "dome" };
@@ -748,6 +750,7 @@ const DRAG_GHOST_COLORS: Record<string, string> = {
   perimeter: "#10b981", // emerald-500
   "fire-life-safety": "#f97316", // orange-500
   install: "#64748b", // slate-500
+  smarthome: "#14b8a6", // teal-500
 };
 
 function buildDragGhost(product: CatalogProduct): HTMLElement {
@@ -762,6 +765,8 @@ function buildDragGhost(product: CatalogProduct): HTMLElement {
             product.subcategory === "exit-sign" ||
             product.subcategory === "aed"
           ? "fire-life-safety"
+    : SMARTHOME_SUBCATEGORIES.has(product.subcategory)
+  ? "smarthome"
           : product.category;
   const color = DRAG_GHOST_COLORS[ghostKey] ?? "#3b82f6";
   const root = document.createElement("div");
