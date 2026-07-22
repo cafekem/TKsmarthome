@@ -103,7 +103,7 @@ const INSTALL_HARDWARE_SUBCATEGORIES = new Set<string>([
 ]);
 
 const TYPE_TONE: Record<
-  DeviceType | "door-hardware" | "perimeter" | "fire-life-safety" | "install" | "furniture",
+  DeviceType | "door-hardware" | "perimeter" | "fire-life-safety" | "install" | "furniture" | "smarthome",
   { dot: string; pill: string; shadow: string; glow: string }
 > = {
   camera: {
@@ -163,6 +163,13 @@ const TYPE_TONE: Record<
     shadow: "hover:shadow-[0_10px_28px_-14px_oklch(0.7_0.18_340/40%)]",
     glow: "rgba(244, 114, 182, 0.20)", // pink-400
   },
+  smarthome: {
+      // Teal — distinct from security-device tones, evokes "connected home"
+      dot: "bg-teal-500",
+      pill: "text-teal-700 dark:text-teal-300 bg-teal-500/10 border-teal-500/20",
+      shadow: "hover:shadow-[0_10px_28px_-14px_oklch(0.7_0.14_180/45%)]",
+      glow: "rgba(20, 184, 166, 0.20)", // teal-500
+  },
 };
 
 const SUBCATEGORY_TO_PREVIEW: Record<string, PreviewKind> = {
@@ -209,6 +216,15 @@ const SUBCATEGORY_TO_PREVIEW: Record<string, PreviewKind> = {
   "access-point": { type: "network", subtype: "access-point" },
   switch: { type: "network", subtype: "switch" },
   nvr: { type: "network", subtype: "nvr" },
+  // Smart home
+  "smart-light": { type: "sensor", subtype: "door-contact" },
+  "smart-plug": { type: "sensor", subtype: "door-contact" },
+    "smart-switch": { type: "sensor", subtype: "door-contact" },
+      "smart-lock": { type: "sensor", subtype: "door-contact" },
+        thermostat: { type: "sensor", subtype: "door-contact" },
+          "smart-hub": { type: "sensor", subtype: "door-contact" },
+            "smart-speaker": { type: "sensor", subtype: "door-contact" },
+              "leak-sensor": { type: "sensor", subtype: "door-contact" },
 };
 
 type CategoryKey =
@@ -220,7 +236,8 @@ type CategoryKey =
   | "perimeter"
   | "fire-life-safety"
   | "install"
-  | "furniture";
+  | "furniture"
+  | "smarthome";
 
 const CATEGORIES: { key: CategoryKey; label: string; icon: LucideIcon }[] = [
   { key: "camera", label: "Cameras", icon: Camera },
@@ -232,6 +249,7 @@ const CATEGORIES: { key: CategoryKey; label: string; icon: LucideIcon }[] = [
   { key: "network", label: "Network", icon: Wifi },
   { key: "install", label: "Install", icon: Wrench },
   { key: "furniture", label: "Furniture", icon: Armchair },
+  { key: "smarthome", label: "Smarthome", icon: Lightbulb },
 ];
 
 function groupByManufacturer(products: CatalogProduct[]) {
