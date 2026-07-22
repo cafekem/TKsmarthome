@@ -310,6 +310,11 @@ export function LibraryPanel({ onCollapse }: { onCollapse?: () => void } = {}) {
       // handles its own rendering path.
       return [];
     }
+    if (activeCategory === "smarthome") {
+        return getProductsByCategory("sensor").filter((p) =>
+              SMARTHOME_SUBCATEGORIES.has(p.subcategory),
+                                                        );
+    }
     const products = getProductsByCategory(activeCategory);
     if (activeCategory === "reader") {
       // Hide door-hardware + perimeter access items from "Access" — they
@@ -336,7 +341,8 @@ export function LibraryPanel({ onCollapse }: { onCollapse?: () => void } = {}) {
           p.subcategory !== "facp" &&
           p.subcategory !== "exit-sign" &&
           p.subcategory !== "aed" &&
-          !INSTALL_HARDWARE_SUBCATEGORIES.has(p.subcategory),
+          !INSTALL_HARDWARE_SUBCATEGORIES.has(p.subcategory) &&
+            !SMARTHOME_SUBCATEGORIES.has(p.subcategory),
       );
     }
     return products;
