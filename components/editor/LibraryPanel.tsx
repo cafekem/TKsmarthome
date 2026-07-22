@@ -9,6 +9,7 @@ import {
   DoorClosed,
   Flame,
   KeyRound,
+    Lightbulb,
   PanelLeftClose,
   Search,
   Shield,
